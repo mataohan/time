@@ -12,7 +12,7 @@ const SALT_ROUNDS = 10;
 
 app.use(cors());
 app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(process.cwd(), 'public')));
 
 // ========== 初始化表 ==========
 async function initDB() {
@@ -352,7 +352,7 @@ app.get('/api/stats', authMiddleware, async (req, res) => {
 
 // ========== SPA fallback ==========
 app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  res.sendFile(path.join(process.cwd(), 'public', 'index.html'));
 });
 
 // ========== 启动 ==========
