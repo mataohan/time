@@ -28,6 +28,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;bottom:0;background:
 .form-group textarea{resize:vertical;min-height:100px;font-family:inherit}
 .form-group select{cursor:pointer}
 .form-group input:focus,.form-group select:focus,.form-group textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-glow)}
+.form-group input[type="date"],.form-group input[type="datetime-local"]{color-scheme:dark}
 .form-group input::placeholder{color:var(--text-muted)}
 
 .btn{width:100%;padding:14px;border:none;border-radius:var(--radius-sm);font-size:16px;font-weight:600;cursor:pointer;transition:var(--transition);letter-spacing:1px}
@@ -51,6 +52,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;bottom:0;background:
 .topbar .brand{display:flex;align-items:center;gap:12px;font-size:20px;font-weight:700}
 .topbar .brand span{background:linear-gradient(135deg,var(--accent),var(--accent-2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
 .topbar .user-info{display:flex;align-items:center;gap:16px}
+.topbar .live-clock{font-family:'Courier New','Consolas',monospace;font-size:20px;font-weight:700;color:var(--accent);background:rgba(79,195,247,0.08);border:1px solid rgba(79,195,247,0.2);border-radius:var(--radius-sm);padding:4px 14px;letter-spacing:2px;white-space:nowrap}
 .topbar .avatar{width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent-3));display:flex;align-items:center;justify-content:center;font-weight:700;font-size:16px}
 .topbar .btn-logout{padding:8px 18px;background:transparent;border:1px solid var(--border);color:var(--text-secondary);border-radius:20px;cursor:pointer;font-size:13px;transition:var(--transition)}
 .topbar .btn-logout:hover{border-color:var(--danger);color:var(--danger)}
@@ -122,6 +124,34 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;bottom:0;background:
 .journal-actions .btn-edit:hover{border-color:var(--accent);color:var(--accent)}
 .journal-actions .btn-del:hover{border-color:var(--danger);color:var(--danger)}
 
+/* Diary items (replaces journal-item) */
+.diary-item{background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius-sm);padding:16px;transition:var(--transition)}
+.diary-item:hover{border-color:var(--border-accent)}
+.diary-item .diary-meta{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:6px}
+.diary-title{font-size:16px;font-weight:600;margin-bottom:6px}
+.diary-content{color:var(--text-secondary);font-size:14px;line-height:1.6}
+.diary-actions{display:flex;gap:8px;margin-top:10px}
+.diary-actions button{padding:4px 12px;font-size:12px;border-radius:12px;border:1px solid var(--border);background:transparent;color:var(--text-secondary);cursor:pointer;transition:var(--transition)}
+.diary-actions .btn-edit:hover{border-color:var(--accent);color:var(--accent)}
+.diary-actions .btn-del:hover{border-color:var(--danger);color:var(--danger)}
+.diary-image{margin-top:10px;border-radius:var(--radius-sm);overflow:hidden;max-width:320px}
+.diary-image img{width:100%;height:auto;display:block;border-radius:var(--radius-sm);border:1px solid var(--border)}
+
+/* Mood tags */
+.mood-tag{font-size:12px;padding:3px 10px;border-radius:12px;font-weight:600;letter-spacing:0.5px}
+.mood-good{background:rgba(76,175,80,0.15);color:var(--success)}
+.mood-ok{background:rgba(255,152,0,0.15);color:var(--warning)}
+.mood-bad{background:rgba(239,83,80,0.15);color:var(--danger)}
+
+/* Form inline row */
+.form-row{display:flex;gap:16px}
+.form-row .form-group{flex:1}
+
+/* Sync status */
+.sync-badge{display:inline-flex;align-items:center;gap:4px;font-size:11px;padding:2px 8px;border-radius:10px;background:rgba(76,175,80,0.15);color:var(--success);margin-left:8px}
+.sync-badge::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--success);animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
+
 /* Tasks */
 .tasks-section{display:grid;grid-template-columns:280px 1fr;gap:24px}
 .task-categories{display:flex;flex-direction:column;gap:8px}
@@ -151,6 +181,9 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;bottom:0;background:
 .task-actions button{padding:6px;background:transparent;border:none;color:var(--text-muted);cursor:pointer;font-size:14px;transition:var(--transition)}
 .task-actions .btn-task-edit:hover{color:var(--accent)}
 .task-actions .btn-task-del:hover{color:var(--danger)}
+.task-time{font-size:11px;color:var(--text-muted);background:rgba(79,195,247,0.06);padding:2px 8px;border-radius:10px;display:inline-flex;align-items:center;gap:2px}
+.task-time-done{color:var(--success);background:rgba(76,175,80,0.08)}
+.task-time-pending{color:var(--text-muted)}
 .priority-high{border-left:3px solid var(--danger)}
 .priority-mid{border-left:3px solid var(--warning)}
 .priority-low{border-left:3px solid transparent}
@@ -245,6 +278,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;bottom:0;background:
   .topbar .brand span{display:none}
   .topbar .brand{font-size:20px}
   .topbar .user-info{gap:8px}
+  .topbar .live-clock{font-size:16px;padding:3px 10px;letter-spacing:1px}
   .topbar .user-info span{font-size:13px;max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .topbar .avatar{width:30px;height:30px;font-size:14px}
   .tab-btn{padding:12px 12px;font-size:13px}
@@ -272,4 +306,11 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;bottom:0;background:
   .task-actions button{padding:4px;font-size:12px}
   .form-group input,.form-group select,.form-group textarea{padding:12px;font-size:14px}
   .btn-submit,.btn-cancel{padding:8px 16px;font-size:13px}
+  .diary-item{padding:12px}
+  .diary-title{font-size:14px}
+  .diary-content{font-size:13px}
+  .diary-image{max-width:100%}
+  .diary-actions button{padding:3px 10px;font-size:11px}
+  .form-row{flex-direction:column;gap:0}
+  .form-row .form-group{margin-bottom:0}
 }

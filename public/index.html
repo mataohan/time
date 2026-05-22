@@ -30,7 +30,7 @@
 <div id="appPage" class="app-container" style="display:none;">
   <div class="topbar">
     <div class="brand">⏳ <span>时间管理大师</span></div>
-    <div class="user-info"><span id="userNickname"></span><div class="avatar" id="userAvatar">U</div><button class="btn-logout" onclick="logout()">退出登录</button></div>
+    <div class="user-info"><div class="live-clock" id="liveClock">00:00:00</div><span id="userNickname"></span><div class="avatar" id="userAvatar">U</div><button class="btn-logout" onclick="logout()">退出登录</button></div>
   </div>
   <div class="tab-nav">
     <button class="tab-btn active" onclick="switchTab('calendar')">📅 日历手账</button>
@@ -53,7 +53,7 @@
           <div class="calendar-grid" id="calendarGrid"></div>
         </div>
         <div class="journal-detail" id="journalDetail" style="display:none;">
-          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;"><h3 id="journalDateTitle">手账详情</h3><button class="btn-add" onclick="openJournalModal()">+ 写手账</button></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;"><h3 id="journalDateTitle">手账详情</h3><button class="btn-add" onclick="openDiaryModal()">+ 写手账</button></div>
           <div class="journal-list" id="journalList"></div>
         </div>
       </div>
