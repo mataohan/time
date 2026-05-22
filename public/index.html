@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>时间管理大师</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- 认证页 -->
+<div id="authPage" class="auth-container">
+  <div class="auth-card">
+    <div class="auth-logo"><span class="icon">⏳</span><h1>时间管理大师</h1><p>记录生活，掌控时间</p></div>
+    <div id="authError" class="error-msg"></div>
+    <form id="authForm" onsubmit="return false;">
+      <div class="form-group" id="nicknameGroup" style="display:none;"><label>昵称</label><input type="text" id="nickname" placeholder="给自己取个名字"></div>
+      <div class="form-group"><label>邮箱</label><input type="email" id="email" placeholder="请输入邮箱地址" required></div>
+      <div class="form-group"><label>密码</label>
+        <div class="pw-wrapper"><input type="password" id="password" placeholder="请输入密码（至少6位）" required>
+          <button type="button" class="pw-toggle" id="pwToggle" onclick="togglePw()">👁️</button></div>
+      </div>
+      <button type="submit" class="btn btn-primary" id="authSubmitBtn">登 录</button>
+    </form>
+    <div class="auth-switch"><span id="switchText">还没有账号？</span><span class="switch-btn" id="switchLink" onclick="toggleAuthMode()">立即注册</span></div>
+  </div>
+</div>
+
+<!-- 主应用 -->
+<div id="appPage" class="app-container" style="display:none;">
+  <div class="topbar">
+    <div class="brand">⏳ <span>时间管理大师</span></div>
+    <div class="user-info"><span id="userNickname"></span><div class="avatar" id="userAvatar">U</div><button class="btn-logout" onclick="logout()">退出登录</button></div>
+  </div>
+  <div class="tab-nav">
+    <button class="tab-btn active" onclick="switchTab('calendar')">📅 日历手账</button>
+    <button class="tab-btn" onclick="switchTab('tasks')">✅ 待办事项 <span class="tab-badge" id="pendingBadge">0</span></button>
+  </div>
+  <div class="content-area">
+
+    <!-- 日历板块 -->
+    <div id="calendarTab" class="calendar-section">
+      <div class="stats-panel">
+        <div class="stat-card fitness" onclick="filterCalCat('健身')"><div class="stat-header"><div class="stat-icon">💪</div><div class="stat-count" id="statFitness">0</div></div><div class="stat-label">健身手账</div></div>
+        <div class="stat-card movie" onclick="filterCalCat('影视')"><div class="stat-header"><div class="stat-icon">🎬</div><div class="stat-count" id="statMovie">0</div></div><div class="stat-label">影视手账</div></div>
+        <div class="stat-card study" onclick="filterCalCat('学习')"><div class="stat-header"><div class="stat-icon">📚</div><div class="stat-count" id="statStudy">0</div></div><div class="stat-label">学习手账</div></div>
+        <div class="stat-card work" onclick="filterCalCat('工作')"><div class="stat-header"><div class="stat-icon">💼</div><div class="stat-count" id="statWork">0</div></div><div class="stat-label">工作手账</div></div>
+        <div class="stat-card daily" onclick="filterCalCat('日常')"><div class="stat-header"><div class="stat-icon">🌟</div><div class="stat-count" id="statDaily">0</div></div><div class="stat-label">日常手账</div></div>
+      </div>
+      <div>
+        <div class="calendar-main">
+          <div class="calendar-header"><h2 id="calendarTitle">日历</h2><div class="calendar-nav"><button onclick="prevMonth()">◀</button><button class="btn-today" onclick="goToToday()">今天</button><button onclick="nextMonth()">▶</button></div></div>
+          <div class="calendar-grid" id="calendarGrid"></div>
+        </div>
+        <div class="journal-detail" id="journalDetail" style="display:none;">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;"><h3 id="journalDateTitle">手账详情</h3><button class="btn-add" onclick="openJournalModal()">+ 写手账</button></div>
+          <div class="journal-list" id="journalList"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 待办板块 -->
+    <div id="tasksTab" class="tasks-section" style="display:none;">
+      <div class="task-categories">
+        <div class="task-cat-btn active" onclick="filterTasks('all')">📋 全部 <span class="count" id="tcAll">0</span></div>
+        <div class="task-cat-btn" onclick="filterTasks('健身')">💪 健身 <span class="count" id="tcFitness">0</span></div>
+        <div class="task-cat-btn" onclick="filterTasks('影视')">🎬 影视 <span class="count" id="tcMovie">0</span></div>
+        <div class="task-cat-btn" onclick="filterTasks('学习')">📚 学习 <span class="count" id="tcStudy">0</span></div>
+        <div class="task-cat-btn" onclick="filterTasks('工作')">💼 工作 <span class="count" id="tcWork">0</span></div>
+        <div class="task-cat-btn" onclick="filterTasks('日常')">🌟 日常 <span class="count" id="tcDaily">0</span></div>
+        <div class="task-cat-btn dashed" onclick="filterTasks('completed')">✅ 已完成 <span class="count" id="tcCompleted">0</span></div>
+      </div>
+      <div class="task-list-panel">
+        <div class="task-list-header"><h3 id="taskListTitle">全部待办事项</h3><button class="btn-add" onclick="openTaskModal()">+ 新增事项</button></div>
+        <div class="task-list" id="taskList"><div class="empty-state"><div class="empty-icon">📝</div><p>暂无待办事项</p></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="modalOverlay" class="modal-overlay" style="display:none;" onclick="if(event.target===this)closeModal()"><div class="modal" id="modalContent"></div></div>
+<div id="toastContainer"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
