@@ -177,7 +177,7 @@ app.post('/api/diaries', authMiddleware, async (req, res) => {
   if (!category || !title || !diary_date) {
     return res.status(400).json({ error: '分类、标题和日期不能为空' });
   }
-  if (!['健身', '影视', '学习', '工作', '日常', '游戏'].includes(category)) {
+  if (!['健身', '影视', '学习', '工作', '日常', '游戏', '视频消化'].includes(category)) {
     return res.status(400).json({ error: '无效的分类' });
   }
 
@@ -234,7 +234,7 @@ app.get('/api/tasks', authMiddleware, async (req, res) => {
 app.post('/api/tasks', authMiddleware, async (req, res) => {
   const { category, title, content, priority, due_date } = req.body;
   if (!category || !title) return res.status(400).json({ error: '分类和标题不能为空' });
-  if (!['健身', '影视', '学习', '工作', '日常', '游戏'].includes(category)) return res.status(400).json({ error: '无效的分类' });
+  if (!['健身', '影视', '学习', '工作', '日常', '游戏', '视频消化'].includes(category)) return res.status(400).json({ error: '无效的分类' });
 
   const task = await db.insert(
     'INSERT INTO tasks (user_id, category, title, content, priority, due_date) VALUES (?, ?, ?, ?, ?, ?)',

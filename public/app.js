@@ -60,10 +60,10 @@ let tasksCache = [];
 let diariesCache = [];
 let diaryFilter = null;
 
-const CATS = ['健身', '影视', '学习', '工作', '日常', '游戏'];
-const CAT_EMOJI = { 健身: '💪', 影视: '🎬', 学习: '📚', 工作: '💼', 日常: '🌟', 游戏: '🎮' };
-const CAT_CSS = { 健身: 'fitness', 影视: 'movie', 学习: 'study', 工作: 'work', 日常: 'daily', 游戏: 'game' };
-const CAT_TC_ID = { 健身: 'tcFitness', 影视: 'tcMovie', 学习: 'tcStudy', 工作: 'tcWork', 日常: 'tcDaily', 游戏: 'tcGame' };
+const CATS = ['健身', '影视', '学习', '工作', '日常', '游戏', '视频消化'];
+const CAT_EMOJI = { 健身: '💪', 影视: '🎬', 学习: '📚', 工作: '💼', 日常: '🌟', 游戏: '🎮', 视频消化: '🎥' };
+const CAT_CSS = { 健身: 'fitness', 影视: 'movie', 学习: 'study', 工作: 'work', 日常: 'daily', 游戏: 'game', 视频消化: 'video' };
+const CAT_TC_ID = { 健身: 'tcFitness', 影视: 'tcMovie', 学习: 'tcStudy', 工作: 'tcWork', 日常: 'tcDaily', 游戏: 'tcGame', 视频消化: 'tcVideo' };
 const MOODS = { '好': '😊', '一般': '😐', '差': '😞' };
 const MOOD_CSS = { '好': 'mood-good', '一般': 'mood-ok', '差': 'mood-bad' };
 
@@ -224,7 +224,7 @@ function updateDots() {
 }
 
 function updateCalStats() {
-  var counts = { 健身: 0, 影视: 0, 学习: 0, 工作: 0, 日常: 0, 游戏: 0 };
+  var counts = { 健身: 0, 影视: 0, 学习: 0, 工作: 0, 日常: 0, 游戏: 0, 视频消化: 0 };
   for (var i = 0; i < diariesCache.length; i++) {
     var c = diariesCache[i].category;
     if (counts[c] !== undefined) counts[c]++;
@@ -236,6 +236,7 @@ function updateCalStats() {
   el = document.getElementById('statWork'); if (el) el.textContent = counts['工作'];
   el = document.getElementById('statDaily'); if (el) el.textContent = counts['日常'];
   el = document.getElementById('statGame'); if (el) el.textContent = counts['游戏'];
+  el = document.getElementById('statVideo'); if (el) el.textContent = counts['视频消化'];
 }
 
 function filterCalCat(cat) {
@@ -249,7 +250,7 @@ function filterDiaryCat(cat) {
   var btns = document.querySelectorAll('.journal-filter-btn');
   for (var i = 0; i < btns.length; i++) btns[i].classList.remove('active');
   if (diaryFilter) {
-    var idxs = { 全部:0, 健身:1, 影视:2, 学习:3, 工作:4, 日常:5, 游戏:6 };
+    var idxs = { 全部:0, 健身:1, 影视:2, 学习:3, 工作:4, 日常:5, 游戏:6, 视频消化:7 };
     if (btns[idxs[diaryFilter]]) btns[idxs[diaryFilter]].classList.add('active');
   } else {
     if (btns[0]) btns[0].classList.add('active');
@@ -557,7 +558,7 @@ function filterTasks(f) {
   taskFilter = f;
   var btns = document.querySelectorAll('.task-cat-btn');
   for (var i = 0; i < btns.length; i++) btns[i].classList.remove('active');
-  var idxs = { all: 0, 健身: 1, 影视: 2, 学习: 3, 工作: 4, 日常: 5, 游戏: 6, completed: 7 };
+  var idxs = { all: 0, 健身: 1, 影视: 2, 学习: 3, 工作: 4, 日常: 5, 游戏: 6, 视频消化: 7, completed: 8 };
   if (btns[idxs[f]]) btns[idxs[f]].classList.add('active');
   loadTasks();
 }

@@ -47,6 +47,7 @@
         <div class="stat-card work" onclick="filterCalCat('工作')"><div class="stat-header"><div class="stat-icon">💼</div><div class="stat-count" id="statWork">0</div></div><div class="stat-label">工作手账</div></div>
         <div class="stat-card daily" onclick="filterCalCat('日常')"><div class="stat-header"><div class="stat-icon">🌟</div><div class="stat-count" id="statDaily">0</div></div><div class="stat-label">日常手账</div></div>
         <div class="stat-card game" onclick="filterCalCat('游戏')"><div class="stat-header"><div class="stat-icon">🎮</div><div class="stat-count" id="statGame">0</div></div><div class="stat-label">游戏手账</div></div>
+        <div class="stat-card video" onclick="filterCalCat('视频消化')"><div class="stat-header"><div class="stat-icon">🎥</div><div class="stat-count" id="statVideo">0</div></div><div class="stat-label">视频消化</div></div>
       </div>
       <div>
         <div class="calendar-main">
@@ -63,6 +64,7 @@
             <button class="journal-filter-btn" onclick="filterDiaryCat('工作')">💼 工作</button>
             <button class="journal-filter-btn" onclick="filterDiaryCat('日常')">🌟 日常</button>
             <button class="journal-filter-btn" onclick="filterDiaryCat('游戏')">🎮 游戏</button>
+            <button class="journal-filter-btn" onclick="filterDiaryCat('视频消化')">🎥 视频消化</button>
           </div>
           <div class="journal-list" id="journalList"></div>
         </div>
@@ -79,6 +81,7 @@
         <div class="task-cat-btn" onclick="filterTasks('工作')">💼 工作 <span class="count" id="tcWork">0</span></div>
         <div class="task-cat-btn" onclick="filterTasks('日常')">🌟 日常 <span class="count" id="tcDaily">0</span></div>
         <div class="task-cat-btn" onclick="filterTasks('游戏')">🎮 游戏 <span class="count" id="tcGame">0</span></div>
+        <div class="task-cat-btn" onclick="filterTasks('视频消化')">🎥 视频消化 <span class="count" id="tcVideo">0</span></div>
         <div class="task-cat-btn dashed" onclick="filterTasks('completed')">✅ 已完成 <span class="count" id="tcCompleted">0</span></div>
       </div>
       <div class="task-list-panel">
