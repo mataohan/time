@@ -14,90 +14,49 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(process.cwd(), 'public')));
 
-// ========== 初始化表 ==========
+// ========== TiDB Cloud 表初始化 ==========
 async function initDB() {
-  if (db.type() === 'pg') {
-    await db.exec(`
-      CREATE TABLE IF NOT EXISTS users (
-        id SERIAL PRIMARY KEY,
-        email VARCHAR(255) UNIQUE NOT NULL,
-        password VARCHAR(255) NOT NULL,
-        nickname VARCHAR(100),
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-      CREATE TABLE IF NOT EXISTS diaries (
-        id SERIAL PRIMARY KEY,
-        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        category VARCHAR(20) NOT NULL CHECK(category IN ('健身','影视','学习','工作','日常')),
-        title VARCHAR(255) NOT NULL,
-        content TEXT DEFAULT '',
-        mood VARCHAR(10) DEFAULT '' CHECK(mood IN ('','好','一般','差')),
-        image_url TEXT DEFAULT '',
-        diary_date DATE NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-      CREATE TABLE IF NOT EXISTS tasks (
-        id SERIAL PRIMARY KEY,
-        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        category VARCHAR(20) NOT NULL CHECK(category IN ('健身','影视','学习','工作','日常')),
-        title VARCHAR(255) NOT NULL,
-        content TEXT DEFAULT '',
-        completed INTEGER DEFAULT 0,
-        priority INTEGER DEFAULT 0 CHECK(priority IN (0,1,2)),
-        due_date DATE,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
-  } else {
-    await db.exec(`
-      CREATE TABLE IF NOT EXISTS users (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        email TEXT UNIQUE NOT NULL,
-        password TEXT NOT NULL,
-        nickname TEXT,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-      );
-      CREATE TABLE IF NOT EXISTS diaries (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER NOT NULL,
-        category TEXT NOT NULL CHECK(category IN ('健身','影视','学习','工作','日常')),
-        title TEXT NOT NULL,
-        content TEXT DEFAULT '',
-        mood TEXT DEFAULT '' CHECK(mood IN ('','好','一般','差')),
-        image_url TEXT DEFAULT '',
-        diary_date DATE NOT NULL,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-      );
-      CREATE TABLE IF NOT EXISTS tasks (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER NOT NULL,
-        category TEXT NOT NULL CHECK(category IN ('健身','影视','学习','工作','日常')),
-        title TEXT NOT NULL,
-        content TEXT DEFAULT '',
-        completed INTEGER DEFAULT 0,
-        priority INTEGER DEFAULT 0 CHECK(priority IN (0,1,2)),
-        due_date DATE,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-      );
-    `);
-  }
-  // Migration: 为已有 tasks 表添加 completed_at 列
-  try {
-    if (db.type() === 'pg') {
-      await db.exec("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP");
-    } else {
-      await db.exec("ALTER TABLE tasks ADD COLUMN completed_at DATETIME");
-    }
-  } catch (e) {
-    // 列已存在则忽略
-  }
-  console.log('数据库就绪 [' + db.type() + ']');
+  await db.exec(`
+    CREATE TABLE IF NOT EXISTS users (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      email VARCHAR(255) UNIQUE NOT NULL,
+      password VARCHAR(255) NOT NULL,
+      nickname VARCHAR(100),
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  await db.exec(`
+    CREATE TABLE IF NOT EXISTS diaries (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      user_id INT NOT NULL,
+      category VARCHAR(20) NOT NULL,
+      title VARCHAR(255) NOT NULL,
+      content TEXT,
+      mood VARCHAR(10) DEFAULT '',
+      image_url TEXT,
+      diary_date DATE NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `);
+  await db.exec(`
+    CREATE TABLE IF NOT EXISTS tasks (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      user_id INT NOT NULL,
+      category VARCHAR(20) NOT NULL,
+      title VARCHAR(255) NOT NULL,
+      content TEXT,
+      completed INT DEFAULT 0,
+      priority INT DEFAULT 0,
+      due_date DATE,
+      completed_at DATETIME,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `);
+  console.log('✅ TiDB Cloud 表初始化完成');
 }
 
 // ========== JWT 认证中间件 ==========
@@ -359,9 +318,9 @@ app.get('*', (req, res) => {
 db.init().then(() => initDB()).then(() => {
   app.listen(PORT, () => {
     console.log(`⏰ 时间管理大师 v2.0 已启动: http://localhost:${PORT}`);
-    console.log(`   数据库: ${db.type().toUpperCase()}`);
+    console.log(`   数据库: TiDB Cloud (MySQL)`);
   });
 }).catch(err => {
-  console.error('数据库初始化失败:', err);
+  console.error('❌ 启动失败:', err.message);
   process.exit(1);
 });

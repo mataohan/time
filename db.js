@@ -1,143 +1,95 @@
-// 数据库抽象层：本地 SQLite (sql.js) / Railway PostgreSQL 自动切换
-const initSqlJs = require('sql.js');
-const fs = require('fs');
-const path = require('path');
+// 数据库层：TiDB Cloud（MySQL 协议）连接池
+const mysql = require('mysql2/promise');
 
-const DB_PATH = path.join(__dirname, 'time_master.db');
-let _db, _type, SQL;
+let pool;
 
 async function init() {
-  if (process.env.DATABASE_URL) {
-    const { Pool } = require('pg');
-    _db = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
-    _type = 'pg';
-  } else {
-    SQL = await initSqlJs();
-    if (fs.existsSync(DB_PATH)) {
-      const buffer = fs.readFileSync(DB_PATH);
-      _db = new SQL.Database(buffer);
-    } else {
-      _db = new SQL.Database();
-    }
-    _db.run('PRAGMA journal_mode=WAL');
-    _db.run('PRAGMA foreign_keys=ON');
-    _type = 'sqlite';
-    saveToFile();
+  const dbUrl = process.env.DATABASE_URL;
+  if (!dbUrl) {
+    console.error('❌ DATABASE_URL 环境变量未设置！请在 Render 环境变量中配置 TiDB Cloud 连接字符串。');
+    console.error('   格式: mysql://user:password@host:port/database');
+    process.exit(1);
+  }
+
+  try {
+    const url = new URL(dbUrl);
+    pool = mysql.createPool({
+      host: url.hostname,
+      port: parseInt(url.port) || 4000,
+      user: decodeURIComponent(url.username),
+      password: decodeURIComponent(url.password),
+      database: url.pathname.replace(/^\//, ''),
+      ssl: { rejectUnauthorized: false },
+      waitForConnections: true,
+      connectionLimit: 10,
+      queueLimit: 0,
+      charset: 'utf8mb4'
+    });
+
+    // 测试连接
+    const conn = await pool.getConnection();
+    await conn.ping();
+    conn.release();
+    console.log('✅ TiDB Cloud 数据库连接成功: ' + url.hostname);
+  } catch (err) {
+    console.error('❌ 数据库连接失败:', err.message);
+    console.error('   请检查 DATABASE_URL 是否正确，以及 TiDB Cloud 是否允许外部连接。');
+    process.exit(1);
   }
 }
 
-// sql.js 是内存数据库，写操作后需要手动持久化到磁盘
-function saveToFile() {
-  if (_type === 'sqlite' && _db) {
-    const data = _db.export();
-    fs.writeFileSync(DB_PATH, Buffer.from(data));
-  }
+function type() {
+  return 'tidb';
 }
 
-// 将 SQLite ? 占位符转换为 PostgreSQL $1, $2 ...
-function _pg(sql) {
-  let i = 0;
-  return sql.replace(/\?/g, () => '$' + (++i));
+// 通用查询
+async function query(sql, params = []) {
+  const [rows] = await pool.query(sql, params);
+  return rows;
 }
 
 module.exports = {
-  type() { return _type; },
+  type,
   init,
 
+  // 执行写操作（不返回结果）
   async run(sql, params = []) {
-    if (_type === 'pg') {
-      await _db.query(_pg(sql), params);
-    } else {
-      _db.run(sql, params);
-      saveToFile();
-    }
+    await pool.query(sql, params);
   },
 
+  // 查询单行
   async get(sql, params = []) {
-    if (_type === 'pg') {
-      const r = await _db.query(_pg(sql), params);
-      return r.rows[0] || null;
-    } else {
-      try {
-        const stmt = _db.prepare(sql);
-        stmt.bind(params);
-        if (stmt.step()) {
-          const row = stmt.getAsObject();
-          stmt.free();
-          return row;
-        }
-        stmt.free();
-        return null;
-      } catch (e) {
-        // 一些 DDL 语句不能用 prepare，回退到 exec
-        return null;
-      }
-    }
+    const rows = await query(sql, params);
+    return rows[0] || null;
   },
 
+  // 查询多行
   async all(sql, params = []) {
-    if (_type === 'pg') {
-      const r = await _db.query(_pg(sql), params);
-      return r.rows;
-    } else {
-      const stmt = _db.prepare(sql);
-      stmt.bind(params);
-      const rows = [];
-      while (stmt.step()) {
-        rows.push(stmt.getAsObject());
-      }
-      stmt.free();
-      return rows;
-    }
+    return query(sql, params);
   },
 
+  // 执行原生 SQL（DDL 等）
   async exec(sql) {
-    if (_type === 'pg') {
-      await _db.query(sql);
-    } else {
-      _db.run(sql);
-      saveToFile();
-    }
+    await pool.query(sql);
   },
 
-  // INSERT 并返回新行
+  // INSERT 并返回新插入的完整行
   async insert(sql, params = []) {
-    if (_type === 'pg') {
-      const pgSql = _pg(sql) + ' RETURNING *';
-      const r = await _db.query(pgSql, params);
-      return r.rows[0];
-    } else {
-      _db.run(sql, params);
-      const result = _db.exec('SELECT last_insert_rowid() as id');
-      const lastId = result[0].values[0][0];
-      saveToFile();
-
-      const match = sql.match(/INTO\s+["']?(\w+)["']?/i);
-      if (match) {
-        const table = match[1];
-        const stmt = _db.prepare(`SELECT * FROM "${table}" WHERE id = ?`);
-        stmt.bind([lastId]);
-        if (stmt.step()) {
-          const row = stmt.getAsObject();
-          stmt.free();
-          return row;
-        }
-        stmt.free();
-      }
-      return { id: lastId };
+    const [result] = await pool.query(sql, params);
+    const match = sql.match(/INTO\s+`?(\w+)`?\s*\(/i);
+    if (match) {
+      const rows = await query(
+        `SELECT * FROM \`${match[1]}\` WHERE id = ?`,
+        [result.insertId]
+      );
+      return rows[0] || { id: result.insertId };
     }
+    return { id: result.insertId };
   },
 
   // DELETE / UPDATE 返回影响行数
   async change(sql, params = []) {
-    if (_type === 'pg') {
-      const r = await _db.query(_pg(sql), params);
-      return r.rowCount;
-    } else {
-      _db.run(sql, params);
-      const changes = _db.getRowsModified();
-      saveToFile();
-      return changes;
-    }
+    const [result] = await pool.query(sql, params);
+    return result.affectedRows;
   }
 };
