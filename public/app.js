@@ -263,7 +263,7 @@ function filterDiaryCat(cat) {
 function selectDate(ds, skipRender) {
   selectedDate = ds;
   if (!skipRender) renderCalendar();
-  var diaries = diariesCache.filter(function (d) { return d.diary_date === ds; });
+  var diaries = diariesCache.filter(function (d) { return normalizeDate(d.diary_date) === ds; });
   if (diaryFilter) {
     diaries = diaries.filter(function (d) { return d.category === diaryFilter; });
   }
@@ -387,13 +387,30 @@ function closeModal() {
 }
 
 // ==================== 同步加载日记 ====================
+// 将 MySQL2 返回的 Date 对象统一转为 YYYY-MM-DD 字符串，避免 === 比较失败
+function normalizeDate(d) {
+  if (!d) return '';
+  if (typeof d === 'object' && d instanceof Date) {
+    var y = d.getFullYear();
+    var m = String(d.getMonth() + 1).padStart(2, '0');
+    var day = String(d.getDate()).padStart(2, '0');
+    return y + '-' + m + '-' + day;
+  }
+  // 截取日期部分 "YYYY-MM-DD"
+  if (typeof d === 'string') return d.substring(0, 10);
+  return String(d);
+}
+
 async function loadDiaries() {
   try {
     var result = await API.getDiaries(currentYear, currentMonth, diaryFilter);
     diariesCache = result.diaries || [];
+    // 标准化所有日记的日期字段
+    for (var i = 0; i < diariesCache.length; i++) {
+      diariesCache[i].diary_date = normalizeDate(diariesCache[i].diary_date);
+    }
     renderCalendar();
     updateCalStats();
-    // loadDiaries 已调用 renderCalendar，selectDate 传 true 避免重复渲染
     selectDate(selectedDate, true);
   } catch (err) {
     toast('加载日记失败: ' + err.message, 'error');
