@@ -175,6 +175,8 @@ function showApp() {
   selectedDate = today();
   startClock();
   switchTab('calendar');
+  // 后台预加载待办事项，初始化角标数字
+  loadTasks();
 }
 
 // ==================== 标签切换 ====================
@@ -258,9 +260,9 @@ function filterDiaryCat(cat) {
   loadDiaries();
 }
 
-function selectDate(ds) {
+function selectDate(ds, skipRender) {
   selectedDate = ds;
-  renderCalendar();
+  if (!skipRender) renderCalendar();
   var diaries = diariesCache.filter(function (d) { return d.diary_date === ds; });
   if (diaryFilter) {
     diaries = diaries.filter(function (d) { return d.category === diaryFilter; });
@@ -357,8 +359,12 @@ async function saveDiary(id) {
       toast('手账已创建');
     }
     closeModal();
+    // 清除分类筛选，确保新创建/编辑的手账一定能显示
+    diaryFilter = null;
+    var btns = document.querySelectorAll('.journal-filter-btn');
+    for (var i = 0; i < btns.length; i++) btns[i].classList.remove('active');
+    if (btns[0]) btns[0].classList.add('active');
     await loadDiaries();
-    selectDate(selectedDate);
   } catch (err) { toast(err.message, 'error'); }
 }
 
@@ -367,8 +373,12 @@ async function deleteDiary(id) {
   try {
     await API.deleteDiary(id);
     toast('手账已删除');
+    // 清除筛选后重新加载，否则删除后日记可能仍在缓存中不更新
+    diaryFilter = null;
+    var btns = document.querySelectorAll('.journal-filter-btn');
+    for (var i = 0; i < btns.length; i++) btns[i].classList.remove('active');
+    if (btns[0]) btns[0].classList.add('active');
     await loadDiaries();
-    selectDate(selectedDate);
   } catch (err) { toast(err.message, 'error'); }
 }
 
@@ -383,7 +393,8 @@ async function loadDiaries() {
     diariesCache = result.diaries || [];
     renderCalendar();
     updateCalStats();
-    selectDate(selectedDate);
+    // loadDiaries 已调用 renderCalendar，selectDate 传 true 避免重复渲染
+    selectDate(selectedDate, true);
   } catch (err) {
     toast('加载日记失败: ' + err.message, 'error');
   }
@@ -464,7 +475,6 @@ async function goToToday() {
   currentMonth = now.getMonth() + 1;
   selectedDate = today();
   await loadDiaries();
-  selectDate(selectedDate);
 }
 
 // ==================== 待办事项 ====================
