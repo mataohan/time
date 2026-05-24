@@ -27,7 +27,11 @@ const API = {
   logout: () => API.post('/api/logout'),
 
   // ---- 日记 ----
-  getDiaries: (y, m) => API.get('/api/diaries?year=' + y + '&month=' + m),
+  getDiaries: (y, m, cat) => {
+    var params = 'year=' + y + '&month=' + m;
+    if (cat) params += '&category=' + cat;
+    return API.get('/api/diaries?' + params);
+  },
   getDiariesByDate: (d) => API.get('/api/diaries/date/' + d),
   createDiary: (b) => API.post('/api/diaries', b),
   updateDiary: (id, b) => API.put('/api/diaries/' + id, b),
@@ -54,11 +58,12 @@ let calFilter = null;
 let taskFilter = 'all';
 let tasksCache = [];
 let diariesCache = [];
+let diaryFilter = null;
 
-const CATS = ['健身', '影视', '学习', '工作', '日常'];
-const CAT_EMOJI = { 健身: '💪', 影视: '🎬', 学习: '📚', 工作: '💼', 日常: '🌟' };
-const CAT_CSS = { 健身: 'fitness', 影视: 'movie', 学习: 'study', 工作: 'work', 日常: 'daily' };
-const CAT_TC_ID = { 健身: 'tcFitness', 影视: 'tcMovie', 学习: 'tcStudy', 工作: 'tcWork', 日常: 'tcDaily' };
+const CATS = ['健身', '影视', '学习', '工作', '日常', '游戏'];
+const CAT_EMOJI = { 健身: '💪', 影视: '🎬', 学习: '📚', 工作: '💼', 日常: '🌟', 游戏: '🎮' };
+const CAT_CSS = { 健身: 'fitness', 影视: 'movie', 学习: 'study', 工作: 'work', 日常: 'daily', 游戏: 'game' };
+const CAT_TC_ID = { 健身: 'tcFitness', 影视: 'tcMovie', 学习: 'tcStudy', 工作: 'tcWork', 日常: 'tcDaily', 游戏: 'tcGame' };
 const MOODS = { '好': '😊', '一般': '😐', '差': '😞' };
 const MOOD_CSS = { '好': 'mood-good', '一般': 'mood-ok', '差': 'mood-bad' };
 
@@ -219,7 +224,7 @@ function updateDots() {
 }
 
 function updateCalStats() {
-  var counts = { 健身: 0, 影视: 0, 学习: 0, 工作: 0, 日常: 0 };
+  var counts = { 健身: 0, 影视: 0, 学习: 0, 工作: 0, 日常: 0, 游戏: 0 };
   for (var i = 0; i < diariesCache.length; i++) {
     var c = diariesCache[i].category;
     if (counts[c] !== undefined) counts[c]++;
@@ -230,6 +235,7 @@ function updateCalStats() {
   el = document.getElementById('statStudy'); if (el) el.textContent = counts['学习'];
   el = document.getElementById('statWork'); if (el) el.textContent = counts['工作'];
   el = document.getElementById('statDaily'); if (el) el.textContent = counts['日常'];
+  el = document.getElementById('statGame'); if (el) el.textContent = counts['游戏'];
 }
 
 function filterCalCat(cat) {
@@ -238,10 +244,26 @@ function filterCalCat(cat) {
   toast(calFilter ? '已筛选: ' + cat : '已取消筛选');
 }
 
+function filterDiaryCat(cat) {
+  diaryFilter = (cat === '全部') ? null : (diaryFilter === cat ? null : cat);
+  var btns = document.querySelectorAll('.journal-filter-btn');
+  for (var i = 0; i < btns.length; i++) btns[i].classList.remove('active');
+  if (diaryFilter) {
+    var idxs = { 全部:0, 健身:1, 影视:2, 学习:3, 工作:4, 日常:5, 游戏:6 };
+    if (btns[idxs[diaryFilter]]) btns[idxs[diaryFilter]].classList.add('active');
+  } else {
+    if (btns[0]) btns[0].classList.add('active');
+  }
+  loadDiaries();
+}
+
 function selectDate(ds) {
   selectedDate = ds;
   renderCalendar();
   var diaries = diariesCache.filter(function (d) { return d.diary_date === ds; });
+  if (diaryFilter) {
+    diaries = diaries.filter(function (d) { return d.category === diaryFilter; });
+  }
   renderDiaryDetail(ds, diaries);
 }
 
@@ -356,7 +378,7 @@ function closeModal() {
 // ==================== 同步加载日记 ====================
 async function loadDiaries() {
   try {
-    var result = await API.getDiaries(currentYear, currentMonth);
+    var result = await API.getDiaries(currentYear, currentMonth, diaryFilter);
     diariesCache = result.diaries || [];
     renderCalendar();
     updateCalStats();
@@ -535,7 +557,7 @@ function filterTasks(f) {
   taskFilter = f;
   var btns = document.querySelectorAll('.task-cat-btn');
   for (var i = 0; i < btns.length; i++) btns[i].classList.remove('active');
-  var idxs = { all: 0, 健身: 1, 影视: 2, 学习: 3, 工作: 4, 日常: 5, completed: 6 };
+  var idxs = { all: 0, 健身: 1, 影视: 2, 学习: 3, 工作: 4, 日常: 5, 游戏: 6, completed: 7 };
   if (btns[idxs[f]]) btns[idxs[f]].classList.add('active');
   loadTasks();
 }

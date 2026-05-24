@@ -29,7 +29,7 @@ async function initDB() {
     CREATE TABLE IF NOT EXISTS diaries (
       id INT AUTO_INCREMENT PRIMARY KEY,
       user_id INT NOT NULL,
-      category VARCHAR(20) NOT NULL,
+      category VARCHAR(50) NOT NULL,
       title VARCHAR(255) NOT NULL,
       content TEXT,
       mood VARCHAR(10) DEFAULT '',
@@ -44,7 +44,7 @@ async function initDB() {
     CREATE TABLE IF NOT EXISTS tasks (
       id INT AUTO_INCREMENT PRIMARY KEY,
       user_id INT NOT NULL,
-      category VARCHAR(20) NOT NULL,
+      category VARCHAR(50) NOT NULL,
       title VARCHAR(255) NOT NULL,
       content TEXT,
       completed INT DEFAULT 0,
@@ -56,6 +56,11 @@ async function initDB() {
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     )
   `);
+
+  // 扩宽 category 字段兼容已有表
+  try { await db.exec("ALTER TABLE diaries MODIFY category VARCHAR(50) NOT NULL"); } catch (e) { /* 忽略 */ }
+  try { await db.exec("ALTER TABLE tasks MODIFY category VARCHAR(50) NOT NULL"); } catch (e) { /* 忽略 */ }
+
   console.log('✅ TiDB Cloud 表初始化完成');
 }
 
@@ -135,9 +140,9 @@ app.post('/api/logout', (req, res) => {
 
 // ========== 日记路由 (diaries) ==========
 
-// 获取用户所有日记（支持按月筛选）
+// 获取用户所有日记（支持按月筛选 & 按分类筛选）
 app.get('/api/diaries', authMiddleware, async (req, res) => {
-  const { year, month } = req.query;
+  const { year, month, category } = req.query;
   let sql = 'SELECT * FROM diaries WHERE user_id = ?';
   const params = [req.userId];
 
@@ -146,6 +151,10 @@ app.get('/api/diaries', authMiddleware, async (req, res) => {
     const end = `${year}-${String(month).padStart(2, '0')}-31`;
     sql += ' AND diary_date >= ? AND diary_date <= ?';
     params.push(start, end);
+  }
+  if (category) {
+    sql += ' AND category = ?';
+    params.push(category);
   }
 
   sql += ' ORDER BY diary_date DESC, created_at DESC';
@@ -168,7 +177,7 @@ app.post('/api/diaries', authMiddleware, async (req, res) => {
   if (!category || !title || !diary_date) {
     return res.status(400).json({ error: '分类、标题和日期不能为空' });
   }
-  if (!['健身', '影视', '学习', '工作', '日常'].includes(category)) {
+  if (!['健身', '影视', '学习', '工作', '日常', '游戏'].includes(category)) {
     return res.status(400).json({ error: '无效的分类' });
   }
 
@@ -225,7 +234,7 @@ app.get('/api/tasks', authMiddleware, async (req, res) => {
 app.post('/api/tasks', authMiddleware, async (req, res) => {
   const { category, title, content, priority, due_date } = req.body;
   if (!category || !title) return res.status(400).json({ error: '分类和标题不能为空' });
-  if (!['健身', '影视', '学习', '工作', '日常'].includes(category)) return res.status(400).json({ error: '无效的分类' });
+  if (!['健身', '影视', '学习', '工作', '日常', '游戏'].includes(category)) return res.status(400).json({ error: '无效的分类' });
 
   const task = await db.insert(
     'INSERT INTO tasks (user_id, category, title, content, priority, due_date) VALUES (?, ?, ?, ?, ?, ?)',

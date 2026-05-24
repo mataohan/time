@@ -4,7 +4,7 @@
   --border-accent: #2a3f6e; --text-primary: #e8ecf4; --text-secondary: #8892b0;
   --text-muted: #5a6480; --accent: #4fc3f7; --accent-glow: rgba(79,195,247,0.25);
   --accent-2: #00bcd4; --accent-3: #7c4dff;
-  --fitness: #4fc3f7; --movie: #ba68c8; --study: #4dd0e1; --work: #64b5f6; --daily: #81d4fa;
+  --fitness: #4fc3f7; --movie: #ba68c8; --study: #4dd0e1; --work: #64b5f6; --daily: #81d4fa; --game: #66bb6a;
   --success: #4caf50; --warning: #ff9800; --danger: #ef5350;
   --shadow: 0 4px 24px rgba(0,0,0,0.4); --shadow-glow: 0 0 30px rgba(79,195,247,0.1);
   --radius: 12px; --radius-sm: 8px; --transition: all 0.3s cubic-bezier(0.4,0,0.2,1);
@@ -83,6 +83,8 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;bottom:0;background:
 .stat-card.work .stat-count{color:var(--work)}
 .stat-card.daily .stat-icon{background:rgba(129,212,250,0.15);color:var(--daily)}
 .stat-card.daily .stat-count{color:var(--daily)}
+.stat-card.game .stat-icon{background:rgba(102,187,106,0.15);color:var(--game)}
+.stat-card.game .stat-count{color:var(--game)}
 
 .calendar-main{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
 .calendar-header{display:flex;align-items:center;justify-content:space-between;padding:20px 24px;border-bottom:1px solid var(--border)}
@@ -103,7 +105,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;bottom:0;background:
 .calendar-day.today .day-num{background:var(--accent);color:#fff;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center}
 .calendar-day .day-dots{display:flex;gap:2px;flex-wrap:wrap;justify-content:center}
 .calendar-day .day-dot{width:6px;height:6px;border-radius:50%}
-.dot-fitness{background:var(--fitness)}.dot-movie{background:var(--movie)}.dot-study{background:var(--study)}.dot-work{background:var(--work)}.dot-daily{background:var(--daily)}
+.dot-fitness{background:var(--fitness)}.dot-movie{background:var(--movie)}.dot-study{background:var(--study)}.dot-work{background:var(--work)}.dot-daily{background:var(--daily)}.dot-game{background:var(--game)}
 
 .journal-detail{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:24px;margin-top:24px}
 .journal-detail h3{font-size:18px;margin-bottom:20px;color:var(--accent)}
@@ -117,6 +119,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;bottom:0;background:
 .cat-study{background:rgba(77,208,225,0.15);color:var(--study)}
 .cat-work{background:rgba(100,181,246,0.15);color:var(--work)}
 .cat-daily{background:rgba(129,212,250,0.15);color:var(--daily)}
+.cat-game{background:rgba(102,187,106,0.15);color:var(--game)}
 .journal-title{font-size:16px;font-weight:600;margin-bottom:6px}
 .journal-content{color:var(--text-secondary);font-size:14px;line-height:1.6}
 .journal-actions{display:flex;gap:8px;margin-top:10px}
@@ -151,6 +154,12 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;bottom:0;background:
 .sync-badge{display:inline-flex;align-items:center;gap:4px;font-size:11px;padding:2px 8px;border-radius:10px;background:rgba(76,175,80,0.15);color:var(--success);margin-left:8px}
 .sync-badge::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--success);animation:pulse 2s infinite}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
+
+/* Diary filter bar */
+.journal-filter-bar{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0 16px}
+.journal-filter-btn{padding:6px 14px;background:var(--bg-input);border:1px solid var(--border);border-radius:16px;color:var(--text-secondary);cursor:pointer;font-size:12px;font-weight:500;transition:var(--transition)}
+.journal-filter-btn:hover{border-color:var(--border-accent);color:var(--text-primary)}
+.journal-filter-btn.active{background:rgba(79,195,247,0.12);border-color:var(--accent);color:var(--accent)}
 
 /* Tasks */
 .tasks-section{display:grid;grid-template-columns:280px 1fr;gap:24px}

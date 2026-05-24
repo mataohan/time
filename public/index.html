@@ -46,6 +46,7 @@
         <div class="stat-card study" onclick="filterCalCat('学习')"><div class="stat-header"><div class="stat-icon">📚</div><div class="stat-count" id="statStudy">0</div></div><div class="stat-label">学习手账</div></div>
         <div class="stat-card work" onclick="filterCalCat('工作')"><div class="stat-header"><div class="stat-icon">💼</div><div class="stat-count" id="statWork">0</div></div><div class="stat-label">工作手账</div></div>
         <div class="stat-card daily" onclick="filterCalCat('日常')"><div class="stat-header"><div class="stat-icon">🌟</div><div class="stat-count" id="statDaily">0</div></div><div class="stat-label">日常手账</div></div>
+        <div class="stat-card game" onclick="filterCalCat('游戏')"><div class="stat-header"><div class="stat-icon">🎮</div><div class="stat-count" id="statGame">0</div></div><div class="stat-label">游戏手账</div></div>
       </div>
       <div>
         <div class="calendar-main">
@@ -54,6 +55,15 @@
         </div>
         <div class="journal-detail" id="journalDetail" style="display:none;">
           <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;"><h3 id="journalDateTitle">手账详情</h3><button class="btn-add" onclick="openDiaryModal()">+ 写手账</button></div>
+          <div class="journal-filter-bar">
+            <button class="journal-filter-btn active" onclick="filterDiaryCat('全部')">全部</button>
+            <button class="journal-filter-btn" onclick="filterDiaryCat('健身')">💪 健身</button>
+            <button class="journal-filter-btn" onclick="filterDiaryCat('影视')">🎬 影视</button>
+            <button class="journal-filter-btn" onclick="filterDiaryCat('学习')">📚 学习</button>
+            <button class="journal-filter-btn" onclick="filterDiaryCat('工作')">💼 工作</button>
+            <button class="journal-filter-btn" onclick="filterDiaryCat('日常')">🌟 日常</button>
+            <button class="journal-filter-btn" onclick="filterDiaryCat('游戏')">🎮 游戏</button>
+          </div>
           <div class="journal-list" id="journalList"></div>
         </div>
       </div>
@@ -68,6 +78,7 @@
         <div class="task-cat-btn" onclick="filterTasks('学习')">📚 学习 <span class="count" id="tcStudy">0</span></div>
         <div class="task-cat-btn" onclick="filterTasks('工作')">💼 工作 <span class="count" id="tcWork">0</span></div>
         <div class="task-cat-btn" onclick="filterTasks('日常')">🌟 日常 <span class="count" id="tcDaily">0</span></div>
+        <div class="task-cat-btn" onclick="filterTasks('游戏')">🎮 游戏 <span class="count" id="tcGame">0</span></div>
         <div class="task-cat-btn dashed" onclick="filterTasks('completed')">✅ 已完成 <span class="count" id="tcCompleted">0</span></div>
       </div>
       <div class="task-list-panel">
