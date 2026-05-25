@@ -61,6 +61,13 @@ async function initDB() {
   try { await db.exec("ALTER TABLE diaries MODIFY category VARCHAR(50) NOT NULL"); } catch (e) { /* 忽略 */ }
   try { await db.exec("ALTER TABLE tasks MODIFY category VARCHAR(50) NOT NULL"); } catch (e) { /* 忽略 */ }
 
+  // v2.1 未完成功能：添加 status / unfinished_reason / unfinished_at
+  try { await db.exec("ALTER TABLE tasks ADD COLUMN status VARCHAR(20) NOT NULL DEFAULT 'pending'"); } catch (e) { /* 已存在 */ }
+  try { await db.exec("ALTER TABLE tasks ADD COLUMN unfinished_reason TEXT"); } catch (e) { /* 已存在 */ }
+  try { await db.exec("ALTER TABLE tasks ADD COLUMN unfinished_at DATETIME"); } catch (e) { /* 已存在 */ }
+  // 迁移已有数据：completed=1 → status='completed'
+  try { await db.exec("UPDATE tasks SET status = 'completed' WHERE completed = 1 AND (status = 'pending' OR status IS NULL)"); } catch (e) { /* 忽略 */ }
+
   console.log('✅ TiDB Cloud 表初始化完成');
 }
 
@@ -219,12 +226,21 @@ app.delete('/api/diaries/:id', authMiddleware, async (req, res) => {
 // ========== 待办路由 ==========
 
 app.get('/api/tasks', authMiddleware, async (req, res) => {
-  const { category, completed } = req.query;
+  const { category, completed, status } = req.query;
   let sql = 'SELECT * FROM tasks WHERE user_id = ?';
   const params = [req.userId];
 
   if (category) { sql += ' AND category = ?'; params.push(category); }
-  if (completed !== undefined) { sql += ' AND completed = ?'; params.push(parseInt(completed)); }
+
+  // 支持 status 参数（pending / completed / unfinished），兼容旧的 completed 参数
+  if (status) {
+    sql += ' AND status = ?';
+    params.push(status);
+  } else if (completed !== undefined) {
+    // 旧版兼容：completed=1 → status='completed'，completed=0 → status='pending'
+    sql += ' AND status = ?';
+    params.push(parseInt(completed) === 1 ? 'completed' : 'pending');
+  }
 
   sql += ' ORDER BY priority DESC, created_at DESC';
   const tasks = await db.all(sql, params);
@@ -237,8 +253,8 @@ app.post('/api/tasks', authMiddleware, async (req, res) => {
   if (!['健身', '影视', '学习', '工作', '日常', '游戏', '视频消化'].includes(category)) return res.status(400).json({ error: '无效的分类' });
 
   const task = await db.insert(
-    'INSERT INTO tasks (user_id, category, title, content, priority, due_date) VALUES (?, ?, ?, ?, ?, ?)',
-    [req.userId, category, title, content || '', priority || 0, due_date || null]
+    'INSERT INTO tasks (user_id, category, title, content, priority, due_date, status, completed) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+    [req.userId, category, title, content || '', priority || 0, due_date || null, 'pending', 0]
   );
   res.json({ message: '创建成功', task });
 });
@@ -247,20 +263,51 @@ app.put('/api/tasks/:id', authMiddleware, async (req, res) => {
   const task = await db.get('SELECT * FROM tasks WHERE id = ? AND user_id = ?', [req.params.id, req.userId]);
   if (!task) return res.status(404).json({ error: '事项不存在' });
 
-  const { category, title, content, completed, priority, due_date, completed_at } = req.body;
-  await db.run(
-    'UPDATE tasks SET category=?, title=?, content=?, completed=?, priority=?, due_date=?, completed_at=?, updated_at=CURRENT_TIMESTAMP WHERE id=? AND user_id=?',
-    [
-      category !== undefined ? category : task.category,
-      title !== undefined ? title : task.title,
-      content !== undefined ? content : task.content,
-      completed !== undefined ? completed : task.completed,
-      priority !== undefined ? priority : task.priority,
-      due_date !== undefined ? due_date : task.due_date,
-      completed_at !== undefined ? (completed_at || null) : task.completed_at,
-      req.params.id, req.userId
-    ]
-  );
+  const { category, title, content, completed, priority, due_date, completed_at, status, unfinished_reason } = req.body;
+
+  const setClauses = [];
+  const params = [];
+
+  if (category !== undefined) { setClauses.push('category=?'); params.push(category); }
+  if (title !== undefined) { setClauses.push('title=?'); params.push(title); }
+  if (content !== undefined) { setClauses.push('content=?'); params.push(content); }
+  if (priority !== undefined) { setClauses.push('priority=?'); params.push(priority); }
+  if (due_date !== undefined) { setClauses.push('due_date=?'); params.push(due_date); }
+
+  // 处理 status 字段的状态转换
+  if (status !== undefined) {
+    if (status === 'completed') {
+      setClauses.push('status=?', 'completed=?', 'completed_at=CURRENT_TIMESTAMP');
+      params.push('completed', 1);
+    } else if (status === 'unfinished') {
+      if (!unfinished_reason || !unfinished_reason.trim()) {
+        return res.status(400).json({ error: '请填写未完成原因' });
+      }
+      setClauses.push('status=?', 'completed=?', 'unfinished_reason=?', 'unfinished_at=CURRENT_TIMESTAMP');
+      params.push('unfinished', 0, unfinished_reason);
+    } else if (status === 'pending') {
+      setClauses.push('status=?', 'completed=?', 'unfinished_reason=NULL', 'unfinished_at=NULL', 'completed_at=NULL');
+      params.push('pending', 0);
+    }
+  }
+
+  // 向后兼容：处理旧的 completed 字段
+  if (completed !== undefined && status === undefined) {
+    setClauses.push('completed=?'); params.push(completed);
+    setClauses.push('status=?'); params.push(completed ? 'completed' : 'pending');
+    if (completed && !task.completed) setClauses.push('completed_at=CURRENT_TIMESTAMP');
+    if (!completed && task.completed) setClauses.push('completed_at=NULL');
+  }
+
+  // 处理完成时间的独立编辑
+  if (completed_at !== undefined && status === undefined && completed === undefined) {
+    setClauses.push('completed_at=?'); params.push(completed_at || null);
+  }
+
+  setClauses.push('updated_at=CURRENT_TIMESTAMP');
+  params.push(req.params.id, req.userId);
+
+  await db.run('UPDATE tasks SET ' + setClauses.join(', ') + ' WHERE id=? AND user_id=?', params);
   const updated = await db.get('SELECT * FROM tasks WHERE id = ?', [req.params.id]);
   res.json({ message: '更新成功', task: updated });
 });
@@ -275,17 +322,24 @@ app.patch('/api/tasks/:id/toggle', authMiddleware, async (req, res) => {
   const task = await db.get('SELECT * FROM tasks WHERE id = ? AND user_id = ?', [req.params.id, req.userId]);
   if (!task) return res.status(404).json({ error: '事项不存在' });
 
-  const newStatus = task.completed ? 0 : 1;
-  // 完成时记录完成时间，取消完成则清除
-  if (newStatus === 1) {
+  // toggle 仅在 pending 和 completed 之间切换；unfinished 则恢复为 pending
+  const curStatus = task.status || (task.completed ? 'completed' : 'pending');
+  let newStatus, newCompleted;
+  if (curStatus === 'pending') {
+    newStatus = 'completed'; newCompleted = 1;
+  } else {
+    newStatus = 'pending'; newCompleted = 0;
+  }
+
+  if (newStatus === 'completed') {
     await db.run(
-      'UPDATE tasks SET completed = ?, completed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-      [newStatus, req.params.id]
+      'UPDATE tasks SET status=?, completed=?, completed_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=?',
+      [newStatus, newCompleted, req.params.id]
     );
   } else {
     await db.run(
-      'UPDATE tasks SET completed = ?, completed_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-      [newStatus, req.params.id]
+      'UPDATE tasks SET status=?, completed=?, completed_at=NULL, unfinished_reason=NULL, unfinished_at=NULL, updated_at=CURRENT_TIMESTAMP WHERE id=?',
+      [newStatus, newCompleted, req.params.id]
     );
   }
   const updated = await db.get('SELECT * FROM tasks WHERE id = ?', [req.params.id]);
@@ -296,13 +350,14 @@ app.patch('/api/tasks/:id/toggle', authMiddleware, async (req, res) => {
 app.get('/api/stats', authMiddleware, async (req, res) => {
   const diaryCount = await db.get('SELECT COUNT(*) as count FROM diaries WHERE user_id = ?', [req.userId]);
   const taskTotal = await db.get('SELECT COUNT(*) as count FROM tasks WHERE user_id = ?', [req.userId]);
-  const taskCompleted = await db.get('SELECT COUNT(*) as count FROM tasks WHERE user_id = ? AND completed = 1', [req.userId]);
-  const taskPending = await db.get('SELECT COUNT(*) as count FROM tasks WHERE user_id = ? AND completed = 0', [req.userId]);
+  const taskCompleted = await db.get("SELECT COUNT(*) as count FROM tasks WHERE user_id = ? AND status = 'completed'", [req.userId]);
+  const taskPending = await db.get("SELECT COUNT(*) as count FROM tasks WHERE user_id = ? AND status = 'pending'", [req.userId]);
+  const taskUnfinished = await db.get("SELECT COUNT(*) as count FROM tasks WHERE user_id = ? AND status = 'unfinished'", [req.userId]);
 
   const tasks = await db.all('SELECT * FROM tasks WHERE user_id = ?', [req.userId]);
   const catCounts = {};
   for (const t of tasks) {
-    if (!t.completed) {
+    if (t.status === 'pending') {
       catCounts[t.category] = (catCounts[t.category] || 0) + 1;
     }
   }
@@ -313,6 +368,7 @@ app.get('/api/stats', authMiddleware, async (req, res) => {
       taskTotal: taskTotal.count,
       taskCompleted: taskCompleted.count,
       taskPending: taskPending.count,
+      taskUnfinished: taskUnfinished.count,
       categoryStats: catCounts
     }
   });

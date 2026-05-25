@@ -74,15 +74,21 @@
     <!-- 待办板块 -->
     <div id="tasksTab" class="tasks-section" style="display:none;">
       <div class="task-categories">
-        <div class="task-cat-btn active" onclick="filterTasks('all')">📋 全部 <span class="count" id="tcAll">0</span></div>
-        <div class="task-cat-btn" onclick="filterTasks('健身')">💪 健身 <span class="count" id="tcFitness">0</span></div>
-        <div class="task-cat-btn" onclick="filterTasks('影视')">🎬 影视 <span class="count" id="tcMovie">0</span></div>
-        <div class="task-cat-btn" onclick="filterTasks('学习')">📚 学习 <span class="count" id="tcStudy">0</span></div>
-        <div class="task-cat-btn" onclick="filterTasks('工作')">💼 工作 <span class="count" id="tcWork">0</span></div>
-        <div class="task-cat-btn" onclick="filterTasks('日常')">🌟 日常 <span class="count" id="tcDaily">0</span></div>
-        <div class="task-cat-btn" onclick="filterTasks('游戏')">🎮 游戏 <span class="count" id="tcGame">0</span></div>
-        <div class="task-cat-btn" onclick="filterTasks('视频消化')">🎥 视频消化 <span class="count" id="tcVideo">0</span></div>
-        <div class="task-cat-btn dashed" onclick="filterTasks('completed')">✅ 已完成 <span class="count" id="tcCompleted">0</span></div>
+        <div class="task-status-tabs">
+          <div class="task-status-btn active" onclick="filterTasksByStatus('pending')">📋 待办 <span class="count" id="tcPending">0</span></div>
+          <div class="task-status-btn" onclick="filterTasksByStatus('completed')">✅ 已完成 <span class="count" id="tcCompleted">0</span></div>
+          <div class="task-status-btn" onclick="filterTasksByStatus('unfinished')">❌ 未完成 <span class="count" id="tcUnfinished">0</span></div>
+        </div>
+        <div class="task-subcat-bar">
+          <div class="task-subcat-btn active" onclick="filterTasksByCat(null)">全部</div>
+          <div class="task-subcat-btn" onclick="filterTasksByCat('健身')">💪 健身 <span class="count" id="tcFitness">0</span></div>
+          <div class="task-subcat-btn" onclick="filterTasksByCat('影视')">🎬 影视 <span class="count" id="tcMovie">0</span></div>
+          <div class="task-subcat-btn" onclick="filterTasksByCat('学习')">📚 学习 <span class="count" id="tcStudy">0</span></div>
+          <div class="task-subcat-btn" onclick="filterTasksByCat('工作')">💼 工作 <span class="count" id="tcWork">0</span></div>
+          <div class="task-subcat-btn" onclick="filterTasksByCat('日常')">🌟 日常 <span class="count" id="tcDaily">0</span></div>
+          <div class="task-subcat-btn" onclick="filterTasksByCat('游戏')">🎮 游戏 <span class="count" id="tcGame">0</span></div>
+          <div class="task-subcat-btn" onclick="filterTasksByCat('视频消化')">🎥 视频消化 <span class="count" id="tcVideo">0</span></div>
+        </div>
       </div>
       <div class="task-list-panel">
         <div class="task-list-header"><h3 id="taskListTitle">全部待办事项</h3><button class="btn-add" onclick="openTaskModal()">+ 新增事项</button></div>

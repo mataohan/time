@@ -55,7 +55,8 @@ let currentTab = 'calendar';
 let currentYear, currentMonth, selectedDate;
 let diaryMap = {};
 let calFilter = null;
-let taskFilter = 'all';
+let taskStatusFilter = 'pending';
+let taskCatFilter = null;
 let tasksCache = [];
 let diariesCache = [];
 let diaryFilter = null;
@@ -497,70 +498,87 @@ async function goToToday() {
 // ==================== 待办事项 ====================
 async function loadTasks() {
   try {
-    var params = {};
-    if (taskFilter !== 'all' && taskFilter !== 'completed') params.category = taskFilter;
-    if (taskFilter === 'completed') params.completed = '1';
+    var params = { status: taskStatusFilter };
+    if (taskCatFilter) params.category = taskCatFilter;
     var result = await API.getTasks(params);
     tasksCache = result.tasks || [];
-
-    var filtered = tasksCache;
-    if (taskFilter === 'all') {
-      filtered = tasksCache.filter(function (t) { return !t.completed; });
-    } else if (taskFilter === 'completed') {
-      filtered = tasksCache;
-    } else {
-      filtered = tasksCache.filter(function (t) { return !t.completed; });
-    }
-    filtered.sort(function (a, b) { return b.priority - a.priority || new Date(b.created_at) - new Date(a.created_at); });
-    renderTaskList(filtered);
+    renderTaskList(tasksCache);
     updateTaskCounts();
   } catch (err) { toast('加载任务失败: ' + err.message, 'error'); }
+}
+
+function fmtTime(dt) {
+  if (!dt) return '';
+  var m = dt.match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2})/);
+  if (m) return m[1] + ' ' + m[2];
+  return dt;
 }
 
 function renderTaskList(tasks) {
   var list = document.getElementById('taskList');
   if (!list) return;
   var title = document.getElementById('taskListTitle');
-  var names = { all: '全部待办事项', completed: '已完成事项' };
-  for (var i = 0; i < CATS.length; i++) names[CATS[i]] = CATS[i] + '待办';
-  if (title) title.textContent = names[taskFilter] || '待办事项';
+  var names = { pending: '待办事项', completed: '已完成事项', unfinished: '未完成事项' };
+  var label = (names[taskStatusFilter] || '待办事项') + (taskCatFilter ? ' · ' + taskCatFilter : '');
+  if (title) title.textContent = label;
 
   if (tasks.length === 0) {
-    list.innerHTML = '<div class="empty-state"><div class="empty-icon">📝</div><p>暂无' + (names[taskFilter] || '') + '</p></div>';
+    list.innerHTML = '<div class="empty-state"><div class="empty-icon">📝</div><p>暂无' + label + '</p></div>';
     return;
   }
 
-  function fmtTime(dt) {
-    if (!dt) return '';
-    // SQLite 返回 "YYYY-MM-DD HH:MM:SS" 格式，直接提取避免 new Date() 时区漂移
-    var m = dt.match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2})/);
-    if (m) return m[1] + ' ' + m[2];
-    return dt;
-  }
   var priLabels = { 2: '高', 1: '中', 0: '低' };
   var priCls = { 2: 'priority-high', 1: 'priority-mid', 0: 'priority-low' };
   var html = '';
 
   for (var i = 0; i < tasks.length; i++) {
     var t = tasks[i];
-    html += '<div class="task-item ' + (t.completed ? 'completed' : '') + ' ' + priCls[t.priority] + '">';
-    html += '<div class="task-checkbox" onclick="toggleTask(\'' + t.id + '\')">' + (t.completed ? '✓' : '') + '</div>';
+    var isDone = t.status === 'completed' || t.completed;
+    var isUnfinished = t.status === 'unfinished';
+    var cls = 'task-item' + (isDone ? ' completed' : '') + (isUnfinished ? ' task-unfinished' : '') + ' ' + (priCls[t.priority] || '');
+    html += '<div class="' + cls + '">';
+
+    // 左侧圆圈
+    if (isUnfinished) {
+      html += '<div class="task-checkbox task-unfinish-dot" onclick="restoreTask(\'' + t.id + '\')" title="恢复为待办">↩</div>';
+    } else if (isDone) {
+      html += '<div class="task-checkbox" onclick="toggleTask(\'' + t.id + '\')" title="取消完成">✓</div>';
+    } else {
+      html += '<div class="task-checkbox" onclick="toggleTask(\'' + t.id + '\')" title="标记完成"></div>';
+    }
+
     html += '<div class="task-body">';
     html += '<div class="task-title">' + esc(t.title) + '</div>';
     if (t.content) html += '<div class="task-content">' + esc(t.content) + '</div>';
+
+    // 未完成：显示原因和时间
+    if (isUnfinished && t.unfinished_reason) {
+      html += '<div class="task-unfinished-reason">💬 ' + esc(t.unfinished_reason) + '</div>';
+      if (t.unfinished_at) html += '<div class="task-unfinished-time">🕐 标记时间: ' + fmtTime(t.unfinished_at) + '</div>';
+    }
+
     html += '<div class="task-meta">';
     html += '<span class="journal-category cat-' + CAT_CSS[t.category] + '">' + CAT_EMOJI[t.category] + ' ' + t.category + '</span>';
     if (t.priority > 0) html += '<span style="color:' + (t.priority === 2 ? 'var(--danger)' : 'var(--warning)') + '">⚡ ' + priLabels[t.priority] + '优先</span>';
     if (t.due_date) html += '<span>📅 ' + t.due_date + '</span>';
-    // 设置时间 & 完成时间
     html += '<span class="task-time">🕐 设置: ' + fmtTime(t.created_at) + '</span>';
-    if (t.completed && t.completed_at) {
+    if (isDone && t.completed_at) {
       html += '<span class="task-time task-time-done">✅ 完成: ' + fmtTime(t.completed_at) + '</span>';
-    } else {
+    } else if (!isUnfinished) {
       html += '<span class="task-time task-time-pending">⏳ 完成: 未完成</span>';
     }
     html += '</div></div>';
+
+    // 右侧按钮
     html += '<div class="task-actions">';
+    // 待办项显示"未完成"按钮
+    if (!isDone && !isUnfinished) {
+      html += '<button class="btn-task-unfinish" onclick="openUnfinishedModal(\'' + t.id + '\')" title="标记为未完成">❌</button>';
+    }
+    // 未完成项显示"恢复"按钮
+    if (isUnfinished) {
+      html += '<button class="btn-task-restore" onclick="restoreTask(\'' + t.id + '\')" title="恢复为待办">🔄</button>';
+    }
     html += '<button class="btn-task-edit" onclick="openTaskModal(\'' + t.id + '\')" title="编辑">✏️</button>';
     html += '<button class="btn-task-del" onclick="deleteTask(\'' + t.id + '\')" title="删除">🗑️</button>';
     html += '</div></div>';
@@ -569,30 +587,91 @@ function renderTaskList(tasks) {
 }
 
 function updateTaskCounts() {
-  var pending = tasksCache.filter(function (t) { return !t.completed; });
-  var completed = tasksCache.filter(function (t) { return t.completed; });
+  var pending = tasksCache.filter(function (t) { return t.status === 'pending' || (!t.status && !t.completed); });
+  var completed = tasksCache.filter(function (t) { return t.status === 'completed' || t.completed; });
+  var unfinished = tasksCache.filter(function (t) { return t.status === 'unfinished'; });
   var el;
-  el = document.getElementById('tcAll'); if (el) el.textContent = pending.length;
+  el = document.getElementById('tcPending'); if (el) el.textContent = pending.length;
+  el = document.getElementById('tcCompleted'); if (el) el.textContent = completed.length;
+  el = document.getElementById('tcUnfinished'); if (el) el.textContent = unfinished.length;
+  // 分类计数（仅 pending）
   for (var i = 0; i < CATS.length; i++) {
     var c = CATS[i];
-    el = document.getElementById(CAT_TC_ID[c]); if (el) el.textContent = pending.filter(function (t) { return t.category === c; }).length;
+    el = document.getElementById(CAT_TC_ID[c]);
+    if (el) el.textContent = pending.filter(function (t) { return t.category === c; }).length;
   }
-  el = document.getElementById('tcCompleted'); if (el) el.textContent = completed.length;
   el = document.getElementById('pendingBadge'); if (el) el.textContent = pending.length;
 }
 
-function filterTasks(f) {
-  taskFilter = f;
-  var btns = document.querySelectorAll('.task-cat-btn');
-  for (var i = 0; i < btns.length; i++) btns[i].classList.remove('active');
-  var idxs = { all: 0, 健身: 1, 影视: 2, 学习: 3, 工作: 4, 日常: 5, 游戏: 6, 视频消化: 7, completed: 8 };
-  if (btns[idxs[f]]) btns[idxs[f]].classList.add('active');
+// ==================== 任务筛选 ====================
+function filterTasksByStatus(status) {
+  taskStatusFilter = status;
+  taskCatFilter = null;
+  var sbtns = document.querySelectorAll('.task-status-btn');
+  var sidxs = { pending: 0, completed: 1, unfinished: 2 };
+  for (var i = 0; i < sbtns.length; i++) sbtns[i].classList.remove('active');
+  if (sbtns[sidxs[status]]) sbtns[sidxs[status]].classList.add('active');
+  // 重置分类筛选
+  var cbtns = document.querySelectorAll('.task-subcat-btn');
+  for (var i = 0; i < cbtns.length; i++) cbtns[i].classList.remove('active');
+  if (cbtns[0]) cbtns[0].classList.add('active');
   loadTasks();
 }
 
+function filterTasksByCat(cat) {
+  taskCatFilter = cat;
+  var btns = document.querySelectorAll('.task-subcat-btn');
+  var catList = [''].concat(CATS);
+  for (var i = 0; i < btns.length; i++) btns[i].classList.remove('active');
+  for (var i = 0; i < catList.length; i++) {
+    if (String(catList[i]) === String(cat || '')) { if (btns[i]) btns[i].classList.add('active'); break; }
+  }
+  loadTasks();
+}
+
+// ==================== 任务操作 ====================
 async function toggleTask(id) {
+  // 确认对话框
+  var task = tasksCache.find(function (t) { return t.id == id; });
+  var isCompleted = task && (task.status === 'completed' || task.completed);
+  if (!isCompleted && !confirm('确定完成此事项吗？')) return;
   try {
     await API.toggleTask(id);
+    toast(isCompleted ? '已恢复为待办' : '事项已完成 ✅');
+    await loadTasks();
+  } catch (err) { toast(err.message, 'error'); }
+}
+
+function openUnfinishedModal(id) {
+  document.getElementById('modalContent').innerHTML =
+    '<h3>❌ 标记为未完成</h3>' +
+    '<div class="form-group"><label>未完成原因（必填）</label><textarea id="unReason" placeholder="请填写未完成的原因..."></textarea></div>' +
+    '<div class="modal-actions">' +
+    '<button class="btn-cancel" onclick="closeModal()">取消</button>' +
+    '<button class="btn-submit" onclick="confirmUnfinished(\'' + id + '\')">确认标记</button>' +
+    '</div>';
+  document.getElementById('modalOverlay').style.display = 'flex';
+  setTimeout(function () {
+    var el = document.getElementById('unReason');
+    if (el) el.focus();
+  }, 100);
+}
+
+async function confirmUnfinished(id) {
+  var reason = document.getElementById('unReason').value.trim();
+  if (!reason) { toast('请填写未完成原因', 'error'); return; }
+  try {
+    await API.updateTask(id, { status: 'unfinished', unfinished_reason: reason });
+    closeModal();
+    toast('已标记为未完成');
+    await loadTasks();
+  } catch (err) { toast(err.message, 'error'); }
+}
+
+async function restoreTask(id) {
+  try {
+    await API.updateTask(id, { status: 'pending' });
+    toast('已恢复为待办');
     await loadTasks();
   } catch (err) { toast(err.message, 'error'); }
 }
@@ -612,11 +691,14 @@ function openTaskModal(id) {
     '<option value="2" ' + (task && task.priority === 2 ? 'selected' : '') + '>🔴 高</option>'
   ].join('');
 
-  // 完成时间编辑（仅已完成任务显示）
+  // 已完成任务可编辑完成时间
   var completedAtHtml = '';
-  if (isEdit && task.completed) {
-    var catVal = task.completed_at ? task.completed_at.substring(0, 16) : '';
-    completedAtHtml = '<div class="form-group"><label>✅ 完成时间（可编辑）</label><input type="datetime-local" id="tCompletedAt" value="' + catVal + '"></div>';
+  if (isEdit && (task.status === 'completed' || task.completed)) {
+    var catVal = '';
+    if (task.completed_at) {
+      catVal = typeof task.completed_at === 'string' ? task.completed_at.substring(0, 16) : '';
+    }
+    completedAtHtml = '<div class="form-group"><label>✅ 完成时间（可编辑）</label><input type="datetime-local" id="tCompletedAt" value="' + esc(catVal) + '"></div>';
   }
 
   document.getElementById('modalContent').innerHTML =
