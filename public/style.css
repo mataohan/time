@@ -237,12 +237,50 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;bottom:0;background:
 ::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
 ::-webkit-scrollbar-thumb:hover{background:var(--border-accent)}
 
+/* Expenses */
+.expenses-section{display:flex;flex-direction:column;gap:20px}
+.expense-stats-bar{display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+.expense-stat-card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:16px 24px;flex:1;min-width:180px}
+.expense-stat-label{font-size:13px;color:var(--text-secondary);margin-bottom:8px}
+.expense-stat-amount{font-size:24px;font-weight:700;color:var(--accent)}
+.expense-month-picker{display:flex;gap:8px;align-items:center}
+.expense-month-picker select{padding:10px 16px;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text-primary);font-size:14px;cursor:pointer;outline:none}
+.expense-month-picker select:focus{border-color:var(--accent)}
+.expense-body{display:grid;grid-template-columns:390px 1fr;gap:20px;align-items:start}
+.expense-calendar-panel{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+.expense-detail{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:20px 24px}
+.expense-detail-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px}
+.expense-detail-header h3{font-size:18px;color:var(--accent);margin:0}
+.expense-daily-total{background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 16px;margin-bottom:16px;font-size:14px;color:var(--text-secondary)}
+.expense-daily-total strong{color:var(--accent);font-size:18px;margin:0 4px}
+.expense-list{display:flex;flex-direction:column;gap:10px;max-height:420px;overflow-y:auto}
+.expense-item{background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius-sm);padding:14px 16px;display:flex;align-items:center;gap:12px;transition:var(--transition);flex-wrap:wrap}
+.expense-item:hover{border-color:var(--border-accent)}
+.expense-cat{font-size:12px;padding:3px 10px;border-radius:12px;font-weight:600;white-space:nowrap;flex-shrink:0}
+.expense-cat-dining{background:rgba(255,152,0,0.15);color:#ff9800}
+.expense-cat-shopping{background:rgba(186,104,200,0.15);color:#ba68c8}
+.expense-cat-transport{background:rgba(77,208,225,0.15);color:#4dd0e1}
+.expense-cat-entertainment{background:rgba(76,175,80,0.15);color:#4caf50}
+.expense-cat-medical{background:rgba(239,83,80,0.15);color:#ef5350}
+.expense-cat-other{background:rgba(129,212,250,0.15);color:#81d4fa}
+.expense-amount{font-size:18px;font-weight:700;color:var(--text-primary);margin-left:auto;white-space:nowrap}
+.expense-note{width:100%;font-size:13px;color:var(--text-muted);padding-left:4px;margin-top:-4px}
+.expense-actions{display:flex;gap:4px;flex-shrink:0}
+.expense-actions .btn-task-edit,.expense-actions .btn-task-del{padding:6px;background:transparent;border:none;color:var(--text-muted);cursor:pointer;font-size:14px;transition:var(--transition)}
+.expense-actions .btn-task-edit:hover{color:var(--accent)}
+.expense-actions .btn-task-del:hover{color:var(--danger)}
+
+/* Expense calendar dots */
+.exp-dot-dining{background:#ff9800}.exp-dot-shopping{background:#ba68c8}.exp-dot-transport{background:#4dd0e1}
+.exp-dot-entertainment{background:#4caf50}.exp-dot-medical{background:#ef5350}.exp-dot-other{background:#81d4fa}
+
 /* ========== 平板适配 ≤1024px ========== */
 @media(max-width:1024px){
   .content-area{padding:20px 16px}
   .calendar-section{grid-template-columns:1fr}
   .journal-detail{max-height:none}
   .tasks-section{grid-template-columns:1fr}
+  .expense-body{grid-template-columns:1fr}
   .task-categories{flex-direction:row;flex-wrap:wrap;gap:6px}
   .journal-filter-bar{flex-wrap:wrap}
 }

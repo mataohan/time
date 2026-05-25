@@ -68,6 +68,21 @@ async function initDB() {
   // 迁移已有数据：completed=1 → status='completed'
   try { await db.exec("UPDATE tasks SET status = 'completed' WHERE completed = 1 AND (status = 'pending' OR status IS NULL)"); } catch (e) { /* 忽略 */ }
 
+  // v2.2 记账功能：创建 expenses 表
+  await db.exec(`
+    CREATE TABLE IF NOT EXISTS expenses (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      user_id INT NOT NULL,
+      amount DECIMAL(10,2) NOT NULL,
+      category VARCHAR(50) NOT NULL,
+      note TEXT,
+      expense_date DATE NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `);
+
   console.log('✅ TiDB Cloud 表初始化完成');
 }
 
@@ -344,6 +359,70 @@ app.patch('/api/tasks/:id/toggle', authMiddleware, async (req, res) => {
   }
   const updated = await db.get('SELECT * FROM tasks WHERE id = ?', [req.params.id]);
   res.json({ message: '状态已更新', task: updated });
+});
+
+// ========== 记账路由 ==========
+
+// 获取消费记录
+app.get('/api/expenses', authMiddleware, async (req, res) => {
+  const { year, month, start_date, end_date } = req.query;
+  let sql = 'SELECT * FROM expenses WHERE user_id = ?';
+  const params = [req.userId];
+
+  if (start_date && end_date) {
+    sql += ' AND expense_date >= ? AND expense_date <= ?';
+    params.push(start_date, end_date);
+  } else if (year && month) {
+    sql += ' AND expense_date >= ? AND expense_date <= ?';
+    params.push(`${year}-${String(month).padStart(2, '0')}-01`, `${year}-${String(month).padStart(2, '0')}-31`);
+  } else if (year) {
+    sql += ' AND expense_date >= ? AND expense_date <= ?';
+    params.push(`${year}-01-01`, `${year}-12-31`);
+  }
+
+  sql += ' ORDER BY expense_date DESC, created_at DESC';
+  const expenses = await db.all(sql, params);
+  res.json({ expenses });
+});
+
+// 创建消费记录
+app.post('/api/expenses', authMiddleware, async (req, res) => {
+  const { amount, category, note, expense_date } = req.body;
+  if (!amount || !category || !expense_date) {
+    return res.status(400).json({ error: '金额、分类和日期不能为空' });
+  }
+  const amt = parseFloat(amount);
+  if (isNaN(amt) || amt <= 0) return res.status(400).json({ error: '金额必须为正数' });
+  if (!['餐饮', '购物', '交通', '娱乐', '医疗', '其他'].includes(category)) {
+    return res.status(400).json({ error: '无效的分类' });
+  }
+  const expense = await db.insert(
+    'INSERT INTO expenses (user_id, amount, category, note, expense_date) VALUES (?, ?, ?, ?, ?)',
+    [req.userId, amt, category, note || '', expense_date]
+  );
+  res.json({ message: '记账成功', expense });
+});
+
+// 更新消费记录
+app.put('/api/expenses/:id', authMiddleware, async (req, res) => {
+  const expense = await db.get('SELECT * FROM expenses WHERE id = ? AND user_id = ?', [req.params.id, req.userId]);
+  if (!expense) return res.status(404).json({ error: '消费记录不存在' });
+  const { amount, category, note, expense_date } = req.body;
+  const amt = amount !== undefined ? parseFloat(amount) : expense.amount;
+  if (amount !== undefined && (isNaN(amt) || amt <= 0)) return res.status(400).json({ error: '金额必须为正数' });
+  await db.run(
+    'UPDATE expenses SET amount=?, category=?, note=?, expense_date=?, updated_at=CURRENT_TIMESTAMP WHERE id=? AND user_id=?',
+    [amt, category || expense.category, note !== undefined ? note : expense.note, expense_date || expense.expense_date, req.params.id, req.userId]
+  );
+  const updated = await db.get('SELECT * FROM expenses WHERE id = ?', [req.params.id]);
+  res.json({ message: '更新成功', expense: updated });
+});
+
+// 删除消费记录
+app.delete('/api/expenses/:id', authMiddleware, async (req, res) => {
+  const changes = await db.change('DELETE FROM expenses WHERE id = ? AND user_id = ?', [req.params.id, req.userId]);
+  if (changes === 0) return res.status(404).json({ error: '消费记录不存在' });
+  res.json({ message: '删除成功' });
 });
 
 // ========== 统计 ==========

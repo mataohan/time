@@ -45,7 +45,13 @@ const API = {
   toggleTask: (id) => API.patch('/api/tasks/' + id + '/toggle'),
 
   // ---- 统计 ----
-  getStats: () => API.get('/api/stats')
+  getStats: () => API.get('/api/stats'),
+
+  // ---- 记账 ----
+  getExpenses: (params) => API.get('/api/expenses?' + new URLSearchParams(params).toString()),
+  createExpense: (b) => API.post('/api/expenses', b),
+  updateExpense: (id, b) => API.put('/api/expenses/' + id, b),
+  deleteExpense: (id) => API.del('/api/expenses/' + id)
 };
 
 // ==================== 全局状态 ====================
@@ -69,6 +75,12 @@ const CAT_CSS = { 健身: 'fitness', 影视: 'movie', 学习: 'study', 工作: '
 const CAT_TC_ID = { 健身: 'tcFitness', 影视: 'tcMovie', 学习: 'tcStudy', 工作: 'tcWork', 日常: 'tcDaily', 游戏: 'tcGame', 视频消化: 'tcVideo' };
 const MOODS = { '好': '😊', '一般': '😐', '差': '😞' };
 const MOOD_CSS = { '好': 'mood-good', '一般': 'mood-ok', '差': 'mood-bad' };
+
+const EXP_CATS = ['餐饮', '购物', '交通', '娱乐', '医疗', '其他'];
+const EXP_EMOJI = { 餐饮: '🍜', 购物: '🛒', 交通: '🚗', 娱乐: '🎮', 医疗: '🏥', 其他: '📦' };
+const EXP_CSS = { 餐饮: 'dining', 购物: 'shopping', 交通: 'transport', 娱乐: 'entertainment', 医疗: 'medical', 其他: 'other' };
+
+let expYear, expMonth, expSelectedDate, expensesCache = [];
 
 // ==================== 工具 ====================
 function toast(msg, type) {
@@ -204,12 +216,20 @@ function switchTab(tab) {
     btns[0].classList.add('active');
     document.getElementById('calendarTab').style.display = 'grid';
     document.getElementById('tasksTab').style.display = 'none';
+    document.getElementById('expensesTab').style.display = 'none';
     loadDiaries();
-  } else {
+  } else if (tab === 'tasks') {
     btns[1].classList.add('active');
     document.getElementById('calendarTab').style.display = 'none';
     document.getElementById('tasksTab').style.display = 'grid';
+    document.getElementById('expensesTab').style.display = 'none';
     loadTasks();
+  } else if (tab === 'expenses') {
+    btns[2].classList.add('active');
+    document.getElementById('calendarTab').style.display = 'none';
+    document.getElementById('tasksTab').style.display = 'none';
+    document.getElementById('expensesTab').style.display = 'block';
+    initExpenses();
   }
 }
 
@@ -866,6 +886,293 @@ async function deleteTask(id) {
     toast('事项已删除');
     await loadTasks();
   } catch (err) { toast(err.message, 'error'); }
+}
+
+// ==================== 记账 ====================
+function initExpenses() {
+  var now = new Date();
+  expYear = now.getFullYear();
+  expMonth = now.getMonth() + 1;
+  expSelectedDate = today();
+  populateExpMonthPicker();
+  loadExpenses();
+}
+
+function populateExpMonthPicker() {
+  var ySel = document.getElementById('expYearSelect');
+  var mSel = document.getElementById('expMonthSelect');
+  var now = new Date();
+  var cy = now.getFullYear();
+  if (ySel) {
+    ySel.innerHTML = '';
+    for (var y = cy - 2; y <= cy + 1; y++) {
+      ySel.innerHTML += '<option value="' + y + '" ' + (y === expYear ? 'selected' : '') + '>' + y + '年</option>';
+    }
+  }
+  if (mSel) {
+    mSel.innerHTML = '';
+    for (var m = 1; m <= 12; m++) {
+      mSel.innerHTML += '<option value="' + m + '" ' + (m === expMonth ? 'selected' : '') + '>' + m + '月</option>';
+    }
+  }
+}
+
+function changeExpMonth() {
+  expYear = parseInt(document.getElementById('expYearSelect').value);
+  expMonth = parseInt(document.getElementById('expMonthSelect').value);
+  loadExpenses();
+}
+
+async function loadExpenses() {
+  try {
+    var result = await API.getExpenses({ year: expYear, month: expMonth });
+    expensesCache = (result.expenses || []).map(function (e) {
+      e.expense_date = normalizeDate(e.expense_date);
+      return e;
+    });
+    renderExpCalendar();
+    updateExpStats();
+    if (expSelectedDate) {
+      var parts = expSelectedDate.split('-');
+      if (parseInt(parts[0]) === expYear && parseInt(parts[1]) === expMonth) {
+        selectExpDate(expSelectedDate);
+      } else {
+        expSelectedDate = null;
+        clearExpDetail();
+      }
+    }
+  } catch (err) { toast('加载记账失败: ' + err.message, 'error'); }
+}
+
+function renderExpCalendar() {
+  var el = document.getElementById('expCalendarTitle');
+  if (el) el.textContent = expYear + '年 ' + expMonth + '月';
+  var grid = document.getElementById('expCalendarGrid');
+  if (!grid) return;
+  grid.innerHTML = '';
+  var headers = ['日', '一', '二', '三', '四', '五', '六'];
+  for (var i = 0; i < headers.length; i++) {
+    var h = document.createElement('div');
+    h.className = 'day-header';
+    h.textContent = headers[i];
+    grid.appendChild(h);
+  }
+  var firstDay = new Date(expYear, expMonth - 1, 1).getDay();
+  var daysInMonth = new Date(expYear, expMonth, 0).getDate();
+  var prevDays = new Date(expYear, expMonth - 1, 0).getDate();
+  var todayStr = today();
+  for (var i = firstDay - 1; i >= 0; i--) {
+    var d = prevDays - i;
+    var m = expMonth === 1 ? 12 : expMonth - 1;
+    var y = expMonth === 1 ? expYear - 1 : expYear;
+    grid.appendChild(createExpDay(d, y + '-' + String(m).padStart(2, '0') + '-' + String(d).padStart(2, '0'), true));
+  }
+  for (var d = 1; d <= daysInMonth; d++) {
+    var ds = expYear + '-' + String(expMonth).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+    grid.appendChild(createExpDay(d, ds, false, ds === todayStr, ds === expSelectedDate));
+  }
+  var total = firstDay + daysInMonth;
+  var rem = total % 7 === 0 ? 0 : 7 - (total % 7);
+  for (var d = 1; d <= rem; d++) {
+    var m = expMonth === 12 ? 1 : expMonth + 1;
+    var y = expMonth === 12 ? expYear + 1 : expYear;
+    grid.appendChild(createExpDay(d, y + '-' + String(m).padStart(2, '0') + '-' + String(d).padStart(2, '0'), true));
+  }
+  updateExpDots();
+}
+
+function createExpDay(day, dateStr, otherMonth, isToday, isSelected) {
+  var el = document.createElement('div');
+  var cls = 'calendar-day';
+  if (otherMonth) cls += ' other-month';
+  if (isToday) cls += ' today';
+  if (isSelected) cls += ' selected';
+  el.className = cls;
+  var num = document.createElement('div');
+  num.className = 'day-num';
+  num.textContent = day;
+  el.appendChild(num);
+  var dots = document.createElement('div');
+  dots.className = 'day-dots';
+  dots.id = 'exp-dots-' + dateStr;
+  el.appendChild(dots);
+  if (!otherMonth) {
+    el.onclick = (function (ds) { return function () { selectExpDate(ds); }; })(dateStr);
+  }
+  return el;
+}
+
+function updateExpDots() {
+  var map = {};
+  for (var i = 0; i < expensesCache.length; i++) {
+    var e = expensesCache[i];
+    if (!map[e.expense_date]) map[e.expense_date] = {};
+    map[e.expense_date][e.category] = true;
+  }
+  var allDots = document.querySelectorAll('#expCalendarGrid .day-dots');
+  for (var i = 0; i < allDots.length; i++) allDots[i].innerHTML = '';
+  var keys = Object.keys(map);
+  for (var i = 0; i < keys.length; i++) {
+    var ds = keys[i];
+    var cats = map[ds];
+    var dotsEl = document.getElementById('exp-dots-' + ds);
+    if (!dotsEl) continue;
+    var catKeys = Object.keys(cats);
+    for (var j = 0; j < catKeys.length; j++) {
+      var c = catKeys[j];
+      var dot = document.createElement('span');
+      dot.className = 'day-dot exp-dot-' + EXP_CSS[c];
+      dotsEl.appendChild(dot);
+    }
+  }
+}
+
+function selectExpDate(ds) {
+  expSelectedDate = ds;
+  renderExpCalendar();
+  var list = expensesCache.filter(function (e) { return e.expense_date === ds; });
+  renderExpList(ds, list);
+}
+
+function clearExpDetail() {
+  document.getElementById('expDateTitle').textContent = '📅 选择日期查看消费';
+  document.getElementById('expenseList').innerHTML = '<div class="empty-state"><div class="empty-icon">💰</div><p>选择日期查看消费记录</p></div>';
+  document.getElementById('expDailyTotal').style.display = 'none';
+}
+
+function renderExpList(ds, expenses) {
+  document.getElementById('expDateTitle').textContent = '📅 ' + ds + ' 消费记录';
+  var list = document.getElementById('expenseList');
+  var daily = document.getElementById('expDailyTotal');
+  if (expenses.length === 0) {
+    list.innerHTML = '<div class="empty-state"><div class="empty-icon">💰</div><p>这一天没有消费记录</p></div>';
+    daily.style.display = 'none';
+    return;
+  }
+  var total = 0;
+  for (var i = 0; i < expenses.length; i++) total += Number(expenses[i].amount);
+  daily.style.display = 'block';
+  daily.innerHTML = '当日合计：<strong>¥ ' + total.toFixed(2) + '</strong>（' + expenses.length + ' 笔）';
+  var html = '';
+  for (var i = 0; i < expenses.length; i++) {
+    var e = expenses[i];
+    html += '<div class="expense-item">';
+    html += '<span class="expense-cat expense-cat-' + EXP_CSS[e.category] + '">' + EXP_EMOJI[e.category] + ' ' + e.category + '</span>';
+    html += '<div class="expense-amount">¥ ' + Number(e.amount).toFixed(2) + '</div>';
+    if (e.note) html += '<div class="expense-note">' + esc(e.note) + '</div>';
+    html += '<div class="expense-actions">';
+    html += '<button class="btn-task-edit" onclick="openExpenseModal(\'' + e.id + '\')" title="编辑">✏️</button>';
+    html += '<button class="btn-task-del" onclick="deleteExpense(\'' + e.id + '\')" title="删除">🗑️</button>';
+    html += '</div></div>';
+  }
+  list.innerHTML = html;
+}
+
+function openExpenseModal(id) {
+  var expense = id ? expensesCache.find(function (e) { return e.id == id; }) : null;
+  var isEdit = !!expense;
+  stopDraftAutoSave();
+  modalDirty = false;
+  var catOpts = '';
+  for (var i = 0; i < EXP_CATS.length; i++) {
+    catOpts += '<option value="' + EXP_CATS[i] + '" ' + (expense && expense.category === EXP_CATS[i] ? 'selected' : '') + '>' + EXP_EMOJI[EXP_CATS[i]] + ' ' + EXP_CATS[i] + '</option>';
+  }
+  var defDate = expense ? expense.expense_date : (expSelectedDate || today());
+  document.getElementById('modalContent').innerHTML =
+    '<h3>' + (isEdit ? '编辑消费' : '记一笔') + '</h3>' +
+    '<div class="form-group"><label>金额（元）<span style="color:var(--danger)">*</span></label><input type="number" id="eAmount" value="' + (expense ? Number(expense.amount) : '') + '" placeholder="请输入消费金额" step="0.01" min="0.01" oninput="modalDirty=true"></div>' +
+    '<div class="form-group"><label>分类</label><select id="eCat" onchange="modalDirty=true">' + catOpts + '</select></div>' +
+    '<div class="form-group"><label>日期</label><input type="date" id="eDate" value="' + defDate + '" onchange="modalDirty=true"></div>' +
+    '<div class="form-group"><label>备注（可选）</label><input type="text" id="eNote" value="' + (expense ? esc(expense.note || '') : '') + '" placeholder="买了什么..." oninput="modalDirty=true"></div>' +
+    '<div class="modal-actions">' +
+    '<button class="btn-cancel" onclick="closeModal()">取消</button>' +
+    '<button class="btn-submit" onclick="saveExpense(\'' + (id || '') + '\')">' + (isEdit ? '保存修改' : '记一笔') + '</button>' +
+    '</div>';
+  document.getElementById('modalOverlay').style.display = 'flex';
+  setTimeout(function () {
+    var el = document.getElementById('eAmount');
+    if (el) el.focus();
+  }, 100);
+}
+
+async function saveExpense(id) {
+  var amount = parseFloat(document.getElementById('eAmount').value);
+  var cat = document.getElementById('eCat').value;
+  var date = document.getElementById('eDate').value;
+  var note = document.getElementById('eNote').value.trim();
+  if (isNaN(amount) || amount <= 0) { toast('请输入有效金额', 'error'); return; }
+  if (!date) { toast('请选择日期', 'error'); return; }
+  try {
+    if (id) {
+      await API.updateExpense(id, { amount: amount, category: cat, note: note, expense_date: date });
+      toast('消费记录已更新');
+    } else {
+      await API.createExpense({ amount: amount, category: cat, note: note, expense_date: date });
+      toast('已记一笔');
+    }
+    modalDirty = false;
+    closeModal();
+    // 根据返回日期决定是否切换月份
+    var dParts = date.split('-');
+    if (parseInt(dParts[0]) !== expYear || parseInt(dParts[1]) !== expMonth) {
+      expYear = parseInt(dParts[0]);
+      expMonth = parseInt(dParts[1]);
+      populateExpMonthPicker();
+    }
+    await loadExpenses();
+    // 选中保存的日期
+    expSelectedDate = date;
+    var list = expensesCache.filter(function (e) { return e.expense_date === date; });
+    renderExpList(date, list);
+    renderExpCalendar();
+    updateExpStats();
+  } catch (err) { toast(err.message, 'error'); }
+}
+
+async function deleteExpense(id) {
+  if (!confirm('确定删除这条消费记录？')) return;
+  try {
+    await API.deleteExpense(id);
+    toast('消费记录已删除');
+    await loadExpenses();
+  } catch (err) { toast(err.message, 'error'); }
+}
+
+function updateExpStats() {
+  var yearTotal = 0;
+  var monthTotal = 0;
+  var monthPrefix = expYear + '-' + String(expMonth).padStart(2, '0') + '-';
+  for (var i = 0; i < expensesCache.length; i++) {
+    var e = expensesCache[i];
+    if (e.expense_date && e.expense_date.startsWith(String(expYear))) yearTotal += Number(e.amount);
+    if (e.expense_date && e.expense_date.startsWith(monthPrefix)) monthTotal += Number(e.amount);
+  }
+  var el;
+  el = document.getElementById('expYearLabel'); if (el) el.textContent = expYear;
+  el = document.getElementById('expMonthLabel'); if (el) el.textContent = expMonth;
+  el = document.getElementById('expYearTotal'); if (el) el.textContent = '¥ ' + yearTotal.toFixed(2);
+  el = document.getElementById('expMonthTotal'); if (el) el.textContent = '¥ ' + monthTotal.toFixed(2);
+}
+
+function expPrevMonth() {
+  if (expMonth === 1) { expMonth = 12; expYear--; }
+  else expMonth--;
+  populateExpMonthPicker();
+  loadExpenses();
+}
+function expNextMonth() {
+  if (expMonth === 12) { expMonth = 1; expYear++; }
+  else expMonth++;
+  populateExpMonthPicker();
+  loadExpenses();
+}
+async function expGoToToday() {
+  var now = new Date();
+  expYear = now.getFullYear();
+  expMonth = now.getMonth() + 1;
+  expSelectedDate = today();
+  populateExpMonthPicker();
+  await loadExpenses();
 }
 
 // ==================== 键盘快捷键 ====================
