@@ -40,34 +40,23 @@
 
     <!-- 日历板块 -->
     <div id="calendarTab" class="calendar-section">
-      <div class="stats-panel">
-        <div class="stat-card fitness" onclick="filterCalCat('健身')"><div class="stat-header"><div class="stat-icon">💪</div><div class="stat-count" id="statFitness">0</div></div><div class="stat-label">健身手账</div></div>
-        <div class="stat-card movie" onclick="filterCalCat('影视')"><div class="stat-header"><div class="stat-icon">🎬</div><div class="stat-count" id="statMovie">0</div></div><div class="stat-label">影视手账</div></div>
-        <div class="stat-card study" onclick="filterCalCat('学习')"><div class="stat-header"><div class="stat-icon">📚</div><div class="stat-count" id="statStudy">0</div></div><div class="stat-label">学习手账</div></div>
-        <div class="stat-card work" onclick="filterCalCat('工作')"><div class="stat-header"><div class="stat-icon">💼</div><div class="stat-count" id="statWork">0</div></div><div class="stat-label">工作手账</div></div>
-        <div class="stat-card daily" onclick="filterCalCat('日常')"><div class="stat-header"><div class="stat-icon">🌟</div><div class="stat-count" id="statDaily">0</div></div><div class="stat-label">日常手账</div></div>
-        <div class="stat-card game" onclick="filterCalCat('游戏')"><div class="stat-header"><div class="stat-icon">🎮</div><div class="stat-count" id="statGame">0</div></div><div class="stat-label">游戏手账</div></div>
-        <div class="stat-card video" onclick="filterCalCat('视频消化')"><div class="stat-header"><div class="stat-icon">🎥</div><div class="stat-count" id="statVideo">0</div></div><div class="stat-label">视频消化</div></div>
+      <div class="calendar-main">
+        <div class="calendar-header"><h2 id="calendarTitle">日历</h2><div class="calendar-nav"><button onclick="prevMonth()">◀</button><button class="btn-today" onclick="goToToday()">今天</button><button onclick="nextMonth()">▶</button></div></div>
+        <div class="calendar-grid" id="calendarGrid"></div>
       </div>
-      <div>
-        <div class="calendar-main">
-          <div class="calendar-header"><h2 id="calendarTitle">日历</h2><div class="calendar-nav"><button onclick="prevMonth()">◀</button><button class="btn-today" onclick="goToToday()">今天</button><button onclick="nextMonth()">▶</button></div></div>
-          <div class="calendar-grid" id="calendarGrid"></div>
+      <div class="journal-detail" id="journalDetail">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;"><h3 id="journalDateTitle">📅 选择日期查看手账</h3><button class="btn-add" onclick="openDiaryModal()">+ 写手账</button></div>
+        <div class="journal-filter-bar">
+          <button class="journal-filter-btn active" onclick="filterDiaryCat('全部')">全部</button>
+          <button class="journal-filter-btn" onclick="filterDiaryCat('健身')">💪 健身</button>
+          <button class="journal-filter-btn" onclick="filterDiaryCat('影视')">🎬 影视</button>
+          <button class="journal-filter-btn" onclick="filterDiaryCat('学习')">📚 学习</button>
+          <button class="journal-filter-btn" onclick="filterDiaryCat('工作')">💼 工作</button>
+          <button class="journal-filter-btn" onclick="filterDiaryCat('日常')">🌟 日常</button>
+          <button class="journal-filter-btn" onclick="filterDiaryCat('游戏')">🎮 游戏</button>
+          <button class="journal-filter-btn" onclick="filterDiaryCat('视频消化')">🎥 视频消化</button>
         </div>
-        <div class="journal-detail" id="journalDetail" style="display:none;">
-          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;"><h3 id="journalDateTitle">手账详情</h3><button class="btn-add" onclick="openDiaryModal()">+ 写手账</button></div>
-          <div class="journal-filter-bar">
-            <button class="journal-filter-btn active" onclick="filterDiaryCat('全部')">全部</button>
-            <button class="journal-filter-btn" onclick="filterDiaryCat('健身')">💪 健身</button>
-            <button class="journal-filter-btn" onclick="filterDiaryCat('影视')">🎬 影视</button>
-            <button class="journal-filter-btn" onclick="filterDiaryCat('学习')">📚 学习</button>
-            <button class="journal-filter-btn" onclick="filterDiaryCat('工作')">💼 工作</button>
-            <button class="journal-filter-btn" onclick="filterDiaryCat('日常')">🌟 日常</button>
-            <button class="journal-filter-btn" onclick="filterDiaryCat('游戏')">🎮 游戏</button>
-            <button class="journal-filter-btn" onclick="filterDiaryCat('视频消化')">🎥 视频消化</button>
-          </div>
-          <div class="journal-list" id="journalList"></div>
-        </div>
+        <div class="journal-list" id="journalList"><div class="empty-state"><div class="empty-icon">📅</div><p>请点击日期查看手账</p></div></div>
       </div>
     </div>
 

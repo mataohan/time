@@ -54,7 +54,6 @@ let isLogin = true;
 let currentTab = 'calendar';
 let currentYear, currentMonth, selectedDate;
 let diaryMap = {};
-let calFilter = null;
 let taskStatusFilter = 'pending';
 let taskCatFilter = null;
 let tasksCache = [];
@@ -81,12 +80,25 @@ function toast(msg, type) {
 function esc(s) { var d = document.createElement('div'); d.textContent = (s || ''); return d.innerHTML; }
 function today() { var d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
 
-// 格式化 SQLite 时间字符串为 YYYY-MM-DD HH:MM，不经过 new Date() 避免时区漂移
+// 将服务器时间转为本地 Date 对象（服务器存 UTC, 序列化为 ISO 字符串或 Date 对象）
+function toLocalDate(dt) {
+  if (!dt) return null;
+  if (dt instanceof Date) return dt;
+  var s = String(dt).trim();
+  // ISO 8601 或带时区格式, new Date() 可直接解析
+  if (s.indexOf('T') !== -1 || s.indexOf('Z') !== -1) return new Date(s);
+  // 纯 "YYYY-MM-DD HH:MM:SS" 无时区 → 假定为 UTC
+  return new Date(s.replace(' ', 'T') + 'Z');
+}
+
+// 格式化为本地时间 HH:MM
 function fmtTimeShort(dt) {
-  if (!dt) return '';
-  var m = dt.match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2})/);
-  if (m) return m[2];
-  return dt;
+  var d = toLocalDate(dt);
+  if (d && !isNaN(d.getTime())) {
+    return d.toLocaleString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false });
+  }
+  var m = String(dt || '').match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2})/);
+  return m ? m[2] : String(dt || '');
 }
 
 // ==================== 实时时钟 ====================
@@ -218,34 +230,11 @@ function updateDots() {
     var catKeys = Object.keys(cats);
     for (var j = 0; j < catKeys.length; j++) {
       var c = catKeys[j];
-      if (calFilter && c !== calFilter) continue;
       var dot = document.createElement('span');
       dot.className = 'day-dot dot-' + CAT_CSS[c];
       dotsEl.appendChild(dot);
     }
   }
-}
-
-function updateCalStats() {
-  var counts = { 健身: 0, 影视: 0, 学习: 0, 工作: 0, 日常: 0, 游戏: 0, 视频消化: 0 };
-  for (var i = 0; i < diariesCache.length; i++) {
-    var c = diariesCache[i].category;
-    if (counts[c] !== undefined) counts[c]++;
-  }
-  var el;
-  el = document.getElementById('statFitness'); if (el) el.textContent = counts['健身'];
-  el = document.getElementById('statMovie'); if (el) el.textContent = counts['影视'];
-  el = document.getElementById('statStudy'); if (el) el.textContent = counts['学习'];
-  el = document.getElementById('statWork'); if (el) el.textContent = counts['工作'];
-  el = document.getElementById('statDaily'); if (el) el.textContent = counts['日常'];
-  el = document.getElementById('statGame'); if (el) el.textContent = counts['游戏'];
-  el = document.getElementById('statVideo'); if (el) el.textContent = counts['视频消化'];
-}
-
-function filterCalCat(cat) {
-  calFilter = calFilter === cat ? null : cat;
-  updateDots();
-  toast(calFilter ? '已筛选: ' + cat : '已取消筛选');
 }
 
 function filterDiaryCat(cat) {
@@ -277,7 +266,6 @@ function renderDiaryDetail(ds, diaries) {
   var title = document.getElementById('journalDateTitle');
   var list = document.getElementById('journalList');
   if (!list) return;
-  detail.style.display = 'block';
   if (title) title.textContent = '📅 ' + ds + ' 的手账';
 
   if (diaries.length === 0) {
@@ -411,7 +399,6 @@ async function loadDiaries() {
       diariesCache[i].diary_date = normalizeDate(diariesCache[i].diary_date);
     }
     renderCalendar();
-    updateCalStats();
     selectDate(selectedDate, true);
   } catch (err) {
     toast('加载日记失败: ' + err.message, 'error');
@@ -508,10 +495,12 @@ async function loadTasks() {
 }
 
 function fmtTime(dt) {
-  if (!dt) return '';
-  var m = dt.match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2})/);
-  if (m) return m[1] + ' ' + m[2];
-  return dt;
+  var d = toLocalDate(dt);
+  if (d && !isNaN(d.getTime())) {
+    return d.toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
+  }
+  var m = String(dt || '').match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2})/);
+  return m ? m[1] + ' ' + m[2] : String(dt || '');
 }
 
 function renderTaskList(tasks) {
