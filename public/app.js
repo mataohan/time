@@ -59,6 +59,9 @@ let taskCatFilter = null;
 let tasksCache = [];
 let diariesCache = [];
 let diaryFilter = null;
+let modalDirty = false;
+let draftTimer = null;
+const DRAFT_KEYS = { diary: 'draft_handwrite', task: 'draft_todo' };
 
 const CATS = ['健身', '影视', '学习', '工作', '日常', '游戏', '视频消化'];
 const CAT_EMOJI = { 健身: '💪', 影视: '🎬', 学习: '📚', 工作: '💼', 日常: '🌟', 游戏: '🎮', 视频消化: '🎥' };
@@ -301,6 +304,9 @@ function openDiaryModal(id) {
   var diary = id ? diariesCache.find(function (d) { return d.id == id; }) : null;
   var isEdit = !!diary;
 
+  stopDraftAutoSave();
+  modalDirty = false;
+
   var catOpts = '';
   for (var i = 0; i < CATS.length; i++) {
     catOpts += '<option value="' + CATS[i] + '" ' + (diary && diary.category === CATS[i] ? 'selected' : '') + '>' + CAT_EMOJI[CATS[i]] + ' ' + CATS[i] + '</option>';
@@ -313,18 +319,32 @@ function openDiaryModal(id) {
     moodOpts += '<option value="' + m + '" ' + (diary && diary.mood === m ? 'selected' : '') + '>' + MOODS[m] + ' ' + m + '</option>';
   }
 
+  // 检查草稿（仅新建手账时）
+  var draftBanner = '';
+  if (!isEdit) {
+    var draft = loadDraft(DRAFT_KEYS.diary);
+    if (draft && !isDraftEmpty(draft)) {
+      draftBanner = '<div class="draft-banner" id="draftBanner"><span>📝 检测到上次未完成的草稿，是否恢复？</span><div class="draft-banner-actions"><button onclick="restoreDraft(event,\'' + DRAFT_KEYS.diary + '\')">恢复</button><button onclick="discardDraft(event,\'' + DRAFT_KEYS.diary + '\')">放弃</button></div></div>';
+    }
+  }
+
   document.getElementById('modalContent').innerHTML =
+    draftBanner +
     '<h3>' + (isEdit ? '编辑手账' : '写手账') + '</h3>' +
-    '<div class="form-row"><div class="form-group"><label>分类</label><select id="dCat">' + catOpts + '</select></div>' +
-    '<div class="form-group"><label>心情</label><select id="dMood">' + moodOpts + '</select></div></div>' +
-    '<div class="form-group"><label>标题</label><input type="text" id="dTitle" value="' + (diary ? esc(diary.title) : '') + '" placeholder="给今天的手账起个标题"></div>' +
-    '<div class="form-group"><label>内容</label><textarea id="dContent" placeholder="记录今天的事情...">' + (diary ? esc(diary.content || '') : '') + '</textarea></div>' +
-    '<div class="form-group"><label>配图URL（可选）</label><input type="url" id="dImageUrl" value="' + (diary ? esc(diary.image_url || '') : '') + '" placeholder="https://example.com/image.jpg"></div>' +
+    '<div class="form-row"><div class="form-group"><label>分类</label><select id="dCat" onchange="modalDirty=true">' + catOpts + '</select></div>' +
+    '<div class="form-group"><label>心情</label><select id="dMood" onchange="modalDirty=true">' + moodOpts + '</select></div></div>' +
+    '<div class="form-group"><label>标题</label><input type="text" id="dTitle" value="' + (diary ? esc(diary.title) : '') + '" placeholder="给今天的手账起个标题" oninput="modalDirty=true"></div>' +
+    '<div class="form-group"><label>内容</label><textarea id="dContent" placeholder="记录今天的事情..." oninput="modalDirty=true">' + (diary ? esc(diary.content || '') : '') + '</textarea></div>' +
+    '<div class="form-group"><label>配图URL（可选）</label><input type="url" id="dImageUrl" value="' + (diary ? esc(diary.image_url || '') : '') + '" placeholder="https://example.com/image.jpg" oninput="modalDirty=true"></div>' +
     '<div class="modal-actions">' +
     '<button class="btn-cancel" onclick="closeModal()">取消</button>' +
     '<button class="btn-submit" onclick="saveDiary(\'' + (id || '') + '\')">' + (isEdit ? '保存修改' : '创建手账') + '</button>' +
     '</div>';
   document.getElementById('modalOverlay').style.display = 'flex';
+
+  // 仅新建时启动自动保存
+  if (!isEdit) startDraftAutoSave(DRAFT_KEYS.diary);
+
   setTimeout(function () {
     var el = document.getElementById('dTitle');
     if (el) el.focus();
@@ -347,6 +367,9 @@ async function saveDiary(id) {
       await API.createDiary({ category: cat, title: title, content: content, diary_date: selectedDate, mood: mood, image_url: image_url });
       toast('手账已创建');
     }
+    clearDraft(DRAFT_KEYS.diary);
+    stopDraftAutoSave();
+    modalDirty = false;
     closeModal();
     // 清除分类筛选，确保新创建/编辑的手账一定能显示
     diaryFilter = null;
@@ -372,6 +395,9 @@ async function deleteDiary(id) {
 }
 
 function closeModal() {
+  if (modalDirty && !confirm('您输入的内容尚未保存，确定要离开吗？')) return;
+  stopDraftAutoSave();
+  modalDirty = false;
   document.getElementById('modalOverlay').style.display = 'none';
 }
 
@@ -503,6 +529,79 @@ function fmtTime(dt) {
   return m ? m[1] + ' ' + m[2] : String(dt || '');
 }
 
+// ==================== 草稿自动保存 ====================
+function getModalFormData() {
+  var modal = document.getElementById('modalContent');
+  if (!modal) return {};
+  var data = {};
+  var els = modal.querySelectorAll('input, textarea, select');
+  for (var i = 0; i < els.length; i++) {
+    var el = els[i];
+    if (el.id) {
+      data[el.id] = el.type === 'checkbox' ? el.checked : el.value;
+    }
+  }
+  return data;
+}
+
+function isDraftEmpty(data) {
+  if (!data) return true;
+  var vals = Object.values(data);
+  for (var i = 0; i < vals.length; i++) {
+    if (vals[i] && String(vals[i]).trim() !== '') return false;
+  }
+  return true;
+}
+
+function saveDraft(key) {
+  var data = getModalFormData();
+  if (Object.keys(data).length === 0 || isDraftEmpty(data)) return;
+  localStorage.setItem(key, JSON.stringify(data));
+}
+
+function loadDraft(key) {
+  try { var raw = localStorage.getItem(key); return raw ? JSON.parse(raw) : null; }
+  catch (e) { return null; }
+}
+
+function clearDraft(key) {
+  localStorage.removeItem(key);
+}
+
+function stopDraftAutoSave() {
+  if (draftTimer) { clearInterval(draftTimer); draftTimer = null; }
+}
+
+function startDraftAutoSave(key) {
+  stopDraftAutoSave();
+  draftTimer = setInterval(function () { saveDraft(key); }, 5000);
+}
+
+function restoreDraft(e, key) {
+  e.stopPropagation();
+  var draft = loadDraft(key);
+  if (!draft) return;
+  var keys = Object.keys(draft);
+  for (var i = 0; i < keys.length; i++) {
+    var el = document.getElementById(keys[i]);
+    if (el) {
+      if (el.type === 'checkbox') el.checked = draft[keys[i]];
+      else el.value = draft[keys[i]];
+    }
+  }
+  modalDirty = true;
+  var banner = document.getElementById('draftBanner');
+  if (banner) banner.remove();
+  toast('已恢复草稿');
+}
+
+function discardDraft(e, key) {
+  e.stopPropagation();
+  clearDraft(key);
+  var banner = document.getElementById('draftBanner');
+  if (banner) banner.remove();
+}
+
 function renderTaskList(tasks) {
   var list = document.getElementById('taskList');
   if (!list) return;
@@ -632,9 +731,11 @@ async function toggleTask(id) {
 }
 
 function openUnfinishedModal(id) {
+  stopDraftAutoSave();
+  modalDirty = false;
   document.getElementById('modalContent').innerHTML =
     '<h3>❌ 标记为未完成</h3>' +
-    '<div class="form-group"><label>未完成原因（必填）</label><textarea id="unReason" placeholder="请填写未完成的原因..."></textarea></div>' +
+    '<div class="form-group"><label>未完成原因（必填）</label><textarea id="unReason" placeholder="请填写未完成的原因..." oninput="modalDirty=true"></textarea></div>' +
     '<div class="modal-actions">' +
     '<button class="btn-cancel" onclick="closeModal()">取消</button>' +
     '<button class="btn-submit" onclick="confirmUnfinished(\'' + id + '\')">确认标记</button>' +
@@ -651,6 +752,7 @@ async function confirmUnfinished(id) {
   if (!reason) { toast('请填写未完成原因', 'error'); return; }
   try {
     await API.updateTask(id, { status: 'unfinished', unfinished_reason: reason });
+    modalDirty = false;
     closeModal();
     toast('已标记为未完成');
     await loadTasks();
@@ -668,6 +770,9 @@ async function restoreTask(id) {
 function openTaskModal(id) {
   var task = id ? tasksCache.find(function (t) { return t.id == id; }) : null;
   var isEdit = !!task;
+
+  stopDraftAutoSave();
+  modalDirty = false;
 
   var catOpts = '';
   for (var i = 0; i < CATS.length; i++) {
@@ -687,22 +792,36 @@ function openTaskModal(id) {
     if (task.completed_at) {
       catVal = typeof task.completed_at === 'string' ? task.completed_at.substring(0, 16) : '';
     }
-    completedAtHtml = '<div class="form-group"><label>✅ 完成时间（可编辑）</label><input type="datetime-local" id="tCompletedAt" value="' + esc(catVal) + '"></div>';
+    completedAtHtml = '<div class="form-group"><label>✅ 完成时间（可编辑）</label><input type="datetime-local" id="tCompletedAt" value="' + esc(catVal) + '" oninput="modalDirty=true"></div>';
+  }
+
+  // 检查草稿（仅新增任务时）
+  var draftBanner = '';
+  if (!isEdit) {
+    var draft = loadDraft(DRAFT_KEYS.task);
+    if (draft && !isDraftEmpty(draft)) {
+      draftBanner = '<div class="draft-banner" id="draftBanner"><span>📝 检测到上次未完成的任务草稿，是否恢复？</span><div class="draft-banner-actions"><button onclick="restoreDraft(event,\'' + DRAFT_KEYS.task + '\')">恢复</button><button onclick="discardDraft(event,\'' + DRAFT_KEYS.task + '\')">放弃</button></div></div>';
+    }
   }
 
   document.getElementById('modalContent').innerHTML =
+    draftBanner +
     '<h3>' + (isEdit ? '编辑事项' : '新增事项') + '</h3>' +
-    '<div class="form-group"><label>分类</label><select id="tCat">' + catOpts + '</select></div>' +
-    '<div class="form-group"><label>标题</label><input type="text" id="tTitle" value="' + (task ? esc(task.title) : '') + '" placeholder="事项标题"></div>' +
-    '<div class="form-group"><label>详细描述</label><textarea id="tContent" placeholder="补充描述...">' + (task ? esc(task.content || '') : '') + '</textarea></div>' +
-    '<div class="form-group"><label>优先级</label><select id="tPriority">' + priOpts + '</select></div>' +
-    '<div class="form-group"><label>截止日期（可选）</label><input type="date" id="tDueDate" value="' + (task && task.due_date ? task.due_date : '') + '"></div>' +
+    '<div class="form-group"><label>分类</label><select id="tCat" onchange="modalDirty=true">' + catOpts + '</select></div>' +
+    '<div class="form-group"><label>标题</label><input type="text" id="tTitle" value="' + (task ? esc(task.title) : '') + '" placeholder="事项标题" oninput="modalDirty=true"></div>' +
+    '<div class="form-group"><label>详细描述</label><textarea id="tContent" placeholder="补充描述..." oninput="modalDirty=true">' + (task ? esc(task.content || '') : '') + '</textarea></div>' +
+    '<div class="form-group"><label>优先级</label><select id="tPriority" onchange="modalDirty=true">' + priOpts + '</select></div>' +
+    '<div class="form-group"><label>截止日期（可选）</label><input type="date" id="tDueDate" value="' + (task && task.due_date ? task.due_date : '') + '" oninput="modalDirty=true"></div>' +
     completedAtHtml +
     '<div class="modal-actions">' +
     '<button class="btn-cancel" onclick="closeModal()">取消</button>' +
     '<button class="btn-submit" onclick="saveTask(\'' + (id || '') + '\')">' + (isEdit ? '保存修改' : '创建事项') + '</button>' +
     '</div>';
   document.getElementById('modalOverlay').style.display = 'flex';
+
+  // 仅新建时启动自动保存
+  if (!isEdit) startDraftAutoSave(DRAFT_KEYS.task);
+
   setTimeout(function () {
     var el = document.getElementById('tTitle');
     if (el) el.focus();
@@ -732,6 +851,9 @@ async function saveTask(id) {
       await API.createTask(body);
       toast('事项已创建');
     }
+    clearDraft(DRAFT_KEYS.task);
+    stopDraftAutoSave();
+    modalDirty = false;
     closeModal();
     await loadTasks();
   } catch (err) { toast(err.message, 'error'); }
@@ -748,7 +870,10 @@ async function deleteTask(id) {
 
 // ==================== 键盘快捷键 ====================
 document.addEventListener('keydown', function (e) {
-  if (e.key === 'Escape') closeModal();
+  if (e.key === 'Escape') {
+    var overlay = document.getElementById('modalOverlay');
+    if (overlay && overlay.style.display !== 'none') closeModal();
+  }
 });
 
 // ==================== 初始化 ====================
