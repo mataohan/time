@@ -348,18 +348,21 @@ function openDiaryModal(id) {
     }
   }
 
+  var diaryDate = diary ? diary.diary_date : selectedDate;
   document.getElementById('modalContent').innerHTML =
     draftBanner +
     '<h3>' + (isEdit ? '编辑手账' : '写手账') + '</h3>' +
-    '<div class="form-row"><div class="form-group"><label>分类</label><select id="dCat" onchange="modalDirty=true">' + catOpts + '</select></div>' +
-    '<div class="form-group"><label>心情</label><select id="dMood" onchange="modalDirty=true">' + moodOpts + '</select></div></div>' +
-    '<div class="form-group"><label>标题</label><input type="text" id="dTitle" value="' + (diary ? esc(diary.title) : '') + '" placeholder="给今天的手账起个标题" oninput="modalDirty=true"></div>' +
-    '<div class="form-group"><label>内容</label><textarea id="dContent" placeholder="记录今天的事情..." oninput="modalDirty=true">' + (diary ? esc(diary.content || '') : '') + '</textarea></div>' +
-    '<div class="form-group"><label>配图URL（可选）</label><input type="url" id="dImageUrl" value="' + (diary ? esc(diary.image_url || '') : '') + '" placeholder="https://example.com/image.jpg" oninput="modalDirty=true"></div>' +
-    '<div class="modal-actions">' +
+    '<div class="modal-form-grid">' +
+    '<div class="form-group form-group-full"><label>标题</label><input type="text" id="dTitle" value="' + (diary ? esc(diary.title) : '') + '" placeholder="给今天的手账起个标题" oninput="modalDirty=true"></div>' +
+    '<div class="form-group form-group-col"><label>分类</label><select id="dCat" onchange="modalDirty=true">' + catOpts + '</select></div>' +
+    '<div class="form-group form-group-col"><label>心情</label><select id="dMood" onchange="modalDirty=true">' + moodOpts + '</select></div>' +
+    '<div class="form-group form-group-col"><label>日期</label><input type="date" id="dDate" value="' + diaryDate + '" onchange="modalDirty=true"></div>' +
+    '<div class="form-group form-group-full"><label>内容</label><textarea id="dContent" placeholder="记录今天的事情..." oninput="modalDirty=true">' + (diary ? esc(diary.content || '') : '') + '</textarea></div>' +
+    '<div class="form-group form-group-full"><label>配图URL（可选）</label><input type="url" id="dImageUrl" value="' + (diary ? esc(diary.image_url || '') : '') + '" placeholder="https://example.com/image.jpg" oninput="modalDirty=true"></div>' +
+    '<div class="modal-actions form-group-full">' +
     '<button class="btn-cancel" onclick="closeModal()">取消</button>' +
     '<button class="btn-submit" onclick="saveDiary(\'' + (id || '') + '\')">' + (isEdit ? '保存修改' : '创建手账') + '</button>' +
-    '</div>';
+    '</div></div>';
   document.getElementById('modalOverlay').style.display = 'flex';
 
   // 仅新建时启动自动保存
@@ -377,14 +380,16 @@ async function saveDiary(id) {
   var content = document.getElementById('dContent').value.trim();
   var mood = document.getElementById('dMood').value;
   var image_url = document.getElementById('dImageUrl').value.trim();
+  var dDateEl = document.getElementById('dDate');
+  var diaryDate = (dDateEl && dDateEl.value) || selectedDate;
   if (!title) { toast('请输入标题', 'error'); return; }
 
   try {
     if (id) {
-      await API.updateDiary(id, { category: cat, title: title, content: content, mood: mood, image_url: image_url });
+      await API.updateDiary(id, { category: cat, title: title, content: content, diary_date: diaryDate, mood: mood, image_url: image_url });
       toast('手账已更新');
     } else {
-      await API.createDiary({ category: cat, title: title, content: content, diary_date: selectedDate, mood: mood, image_url: image_url });
+      await API.createDiary({ category: cat, title: title, content: content, diary_date: diaryDate, mood: mood, image_url: image_url });
       toast('手账已创建');
     }
     clearDraft(DRAFT_KEYS.diary);
@@ -812,7 +817,7 @@ function openTaskModal(id) {
     if (task.completed_at) {
       catVal = typeof task.completed_at === 'string' ? task.completed_at.substring(0, 16) : '';
     }
-    completedAtHtml = '<div class="form-group"><label>✅ 完成时间（可编辑）</label><input type="datetime-local" id="tCompletedAt" value="' + esc(catVal) + '" oninput="modalDirty=true"></div>';
+    completedAtHtml = '<div class="form-group form-group-full"><label>✅ 完成时间（可编辑）</label><input type="datetime-local" id="tCompletedAt" value="' + esc(catVal) + '" oninput="modalDirty=true"></div>';
   }
 
   // 检查草稿（仅新增任务时）
@@ -827,16 +832,17 @@ function openTaskModal(id) {
   document.getElementById('modalContent').innerHTML =
     draftBanner +
     '<h3>' + (isEdit ? '编辑事项' : '新增事项') + '</h3>' +
-    '<div class="form-group"><label>分类</label><select id="tCat" onchange="modalDirty=true">' + catOpts + '</select></div>' +
-    '<div class="form-group"><label>标题</label><input type="text" id="tTitle" value="' + (task ? esc(task.title) : '') + '" placeholder="事项标题" oninput="modalDirty=true"></div>' +
-    '<div class="form-group"><label>详细描述</label><textarea id="tContent" placeholder="补充描述..." oninput="modalDirty=true">' + (task ? esc(task.content || '') : '') + '</textarea></div>' +
-    '<div class="form-group"><label>优先级</label><select id="tPriority" onchange="modalDirty=true">' + priOpts + '</select></div>' +
-    '<div class="form-group"><label>截止日期（可选）</label><input type="date" id="tDueDate" value="' + (task && task.due_date ? task.due_date : '') + '" oninput="modalDirty=true"></div>' +
+    '<div class="modal-form-grid">' +
+    '<div class="form-group form-group-full"><label>标题</label><input type="text" id="tTitle" value="' + (task ? esc(task.title) : '') + '" placeholder="事项标题" oninput="modalDirty=true"></div>' +
+    '<div class="form-group form-group-col"><label>分类</label><select id="tCat" onchange="modalDirty=true">' + catOpts + '</select></div>' +
+    '<div class="form-group form-group-col"><label>优先级</label><select id="tPriority" onchange="modalDirty=true">' + priOpts + '</select></div>' +
+    '<div class="form-group form-group-col"><label>截止日期</label><input type="date" id="tDueDate" value="' + (task && task.due_date ? task.due_date : '') + '" oninput="modalDirty=true"></div>' +
+    '<div class="form-group form-group-full"><label>详细描述</label><textarea id="tContent" placeholder="补充描述..." oninput="modalDirty=true">' + (task ? esc(task.content || '') : '') + '</textarea></div>' +
     completedAtHtml +
-    '<div class="modal-actions">' +
+    '<div class="modal-actions form-group-full">' +
     '<button class="btn-cancel" onclick="closeModal()">取消</button>' +
     '<button class="btn-submit" onclick="saveTask(\'' + (id || '') + '\')">' + (isEdit ? '保存修改' : '创建事项') + '</button>' +
-    '</div>';
+    '</div></div>';
   document.getElementById('modalOverlay').style.display = 'flex';
 
   // 仅新建时启动自动保存
@@ -1080,14 +1086,15 @@ function openExpenseModal(id) {
   var defDate = expense ? expense.expense_date : (expSelectedDate || today());
   document.getElementById('modalContent').innerHTML =
     '<h3>' + (isEdit ? '编辑消费' : '记一笔') + '</h3>' +
-    '<div class="form-group"><label>金额（元）<span style="color:var(--danger)">*</span></label><input type="number" id="eAmount" value="' + (expense ? Number(expense.amount) : '') + '" placeholder="请输入消费金额" step="0.01" min="0.01" oninput="modalDirty=true"></div>' +
-    '<div class="form-group"><label>分类</label><select id="eCat" onchange="modalDirty=true">' + catOpts + '</select></div>' +
-    '<div class="form-group"><label>日期</label><input type="date" id="eDate" value="' + defDate + '" onchange="modalDirty=true"></div>' +
-    '<div class="form-group"><label>备注（可选）</label><input type="text" id="eNote" value="' + (expense ? esc(expense.note || '') : '') + '" placeholder="买了什么..." oninput="modalDirty=true"></div>' +
-    '<div class="modal-actions">' +
+    '<div class="modal-form-grid">' +
+    '<div class="form-group form-group-col"><label>金额（元）<span style="color:var(--danger)">*</span></label><input type="number" id="eAmount" value="' + (expense ? Number(expense.amount) : '') + '" placeholder="请输入消费金额" step="0.01" min="0.01" oninput="modalDirty=true"></div>' +
+    '<div class="form-group form-group-col"><label>分类</label><select id="eCat" onchange="modalDirty=true">' + catOpts + '</select></div>' +
+    '<div class="form-group form-group-col"><label>日期</label><input type="date" id="eDate" value="' + defDate + '" onchange="modalDirty=true"></div>' +
+    '<div class="form-group form-group-full"><label>备注（可选）</label><input type="text" id="eNote" value="' + (expense ? esc(expense.note || '') : '') + '" placeholder="买了什么..." oninput="modalDirty=true"></div>' +
+    '<div class="modal-actions form-group-full">' +
     '<button class="btn-cancel" onclick="closeModal()">取消</button>' +
     '<button class="btn-submit" onclick="saveExpense(\'' + (id || '') + '\')">' + (isEdit ? '保存修改' : '记一笔') + '</button>' +
-    '</div>';
+    '</div></div>';
   document.getElementById('modalOverlay').style.display = 'flex';
   setTimeout(function () {
     var el = document.getElementById('eAmount');

@@ -382,5 +382,27 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;bottom:0;background:
   .calendar-day{min-height:96px;padding:12px}
   .calendar-day .day-num{font-size:16px}
   .calendar-day .day-dot{width:8px;height:8px}
-  .modal{max-width:800px;padding:40px}
+  .modal{max-width:min(1400px,95vw);padding:48px 52px}
+  .modal-form-grid{gap:0 32px}
+}
+
+/* ========== 桌面端弹窗多列Grid布局 ≥768px ========== */
+@media(min-width:768px){
+  /* 弹窗宽度大幅扩展 */
+  .modal{max-width:min(1200px,95vw);padding:36px 40px}
+
+  /* 多列表单网格：3列 */
+  .modal-form-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0 24px}
+
+  /* 占满整行 */
+  .form-group-full{grid-column:1 / -1}
+
+  /* 各占一列 */
+  .form-group-col{grid-column:span 1}
+
+  /* 按钮区域占满整行 */
+  .modal-form-grid > .modal-actions{grid-column:1 / -1}
+
+  /* 标题更大 */
+  .modal h3{font-size:24px;margin-bottom:28px}
 }
