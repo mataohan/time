@@ -24,8 +24,8 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;bottom:0;background:
 
 .form-group{margin-bottom:20px}
 .form-group label{display:block;font-size:14px;font-weight:600;color:var(--text-secondary);margin-bottom:8px;text-transform:uppercase;letter-spacing:1px}
-.form-group input,.form-group select,.form-group textarea{width:100%;padding:16px 18px;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text-primary);font-size:16px;transition:var(--transition);outline:none}
-.form-group textarea{resize:vertical;min-height:120px;font-family:inherit}
+.form-group input,.form-group select,.form-group textarea{width:100%;padding:14px 18px;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text-primary);font-size:16px;transition:var(--transition);outline:none;min-height:44px}
+.form-group textarea{resize:vertical;min-height:160px;font-family:inherit}
 .form-group select{cursor:pointer}
 .form-group input:focus,.form-group select:focus,.form-group textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-glow)}
 .form-group input[type="date"],.form-group input[type="datetime-local"]{color-scheme:dark}
@@ -129,8 +129,8 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;bottom:0;background:
 .mood-bad{background:rgba(239,83,80,0.15);color:var(--danger)}
 
 /* Form inline row */
-.form-row{display:flex;gap:16px}
-.form-row .form-group{flex:1}
+.form-row{display:flex;flex-direction:column;gap:0}
+.form-row .form-group{flex:none}
 
 /* Sync status */
 .sync-badge{display:inline-flex;align-items:center;gap:4px;font-size:11px;padding:2px 8px;border-radius:10px;background:rgba(76,175,80,0.15);color:var(--success);margin-left:8px}
@@ -207,10 +207,10 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;bottom:0;background:
 /* Modal */
 .modal-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;z-index:1000;animation:fadeIn 0.2s ease}
 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
-.modal{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:36px;width:100%;max-width:580px;box-shadow:var(--shadow),var(--shadow-glow);animation:slideUp 0.3s ease;max-height:90vh;overflow-y:auto}
+.modal{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:32px;width:100%;max-width:620px;box-shadow:var(--shadow),var(--shadow-glow);animation:slideUp 0.3s ease;max-height:80vh;overflow-y:auto}
 @keyframes slideUp{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}
 .modal h3{font-size:22px;margin-bottom:24px;color:var(--accent)}
-.modal-actions{display:flex;gap:12px;justify-content:flex-end;margin-top:24px}
+.modal-actions{display:flex;gap:12px;justify-content:flex-end;margin-top:32px}
 .btn-cancel{padding:12px 28px;background:transparent;border:1px solid var(--border);color:var(--text-secondary);border-radius:22px;cursor:pointer;font-size:15px;transition:var(--transition);min-height:44px}
 .btn-cancel:hover{border-color:var(--text-muted)}
 .btn-submit{padding:12px 28px;background:linear-gradient(135deg,var(--accent),var(--accent-3));border:none;border-radius:22px;color:#fff;cursor:pointer;font-size:15px;font-weight:600;transition:var(--transition);min-height:44px}
@@ -284,7 +284,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;bottom:0;background:
   .expense-body{grid-template-columns:1fr}
   .task-categories{flex-direction:row;flex-wrap:wrap;gap:6px}
   .journal-filter-bar{flex-wrap:wrap}
-  .modal{max-width:520px}
+  .modal{max-width:560px}
 }
 
 /* ========== 手机适配 ≤768px ========== */
@@ -319,7 +319,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;bottom:0;background:
   .task-item{padding:14px;gap:12px}
   .task-title{font-size:15px}
   .task-meta{gap:8px}
-  .modal{max-width:92vw;padding:24px 18px;border-radius:14px}
+  .modal{max-width:90vw;padding:28px 20px;border-radius:14px}
   .modal h3{font-size:19px;margin-bottom:18px}
   .toast{max-width:90vw;top:auto;bottom:20px;right:12px;left:12px}
   .journal-detail h3{font-size:16px}
@@ -358,8 +358,9 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;bottom:0;background:
   .journal-actions button{padding:6px 12px;font-size:12px;min-height:38px;min-width:50px}
   .task-actions{gap:2px}
   .task-actions button{padding:6px;font-size:14px;min-width:40px;min-height:40px}
-  .form-group input,.form-group select,.form-group textarea{padding:12px 14px;font-size:15px}
-  .btn-submit,.btn-cancel{padding:10px 18px;font-size:14px;min-height:42px}
+  .form-group input,.form-group select,.form-group textarea{padding:12px 14px;font-size:15px;min-height:44px}
+  .form-group textarea{min-height:140px}
+  .btn-submit,.btn-cancel{padding:10px 18px;font-size:14px;min-height:44px}
   .diary-item{padding:14px}
   .diary-title{font-size:15px}
   .diary-content{font-size:14px}
@@ -369,6 +370,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;bottom:0;background:
   .form-row .form-group{margin-bottom:0}
   .expense-item{padding:14px 16px}
   .expense-amount{font-size:17px}
+  .modal{padding:24px 16px;max-width:92vw}
 }
 
 /* ========== 宽屏优化 ≥1600px ========== */
@@ -380,4 +382,5 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;bottom:0;background:
   .calendar-day{min-height:96px;padding:12px}
   .calendar-day .day-num{font-size:16px}
   .calendar-day .day-dot{width:8px;height:8px}
+  .modal{max-width:800px;padding:40px}
 }
