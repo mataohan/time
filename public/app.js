@@ -304,7 +304,7 @@ function renderDiaryDetail(ds, diaries) {
     html += '<div class="diary-meta">';
     html += '<span class="journal-category cat-' + CAT_CSS[d.category] + '">' + CAT_EMOJI[d.category] + ' ' + d.category + '</span>';
     if (d.mood) html += '<span class="mood-tag ' + MOOD_CSS[d.mood] + '">' + (MOODS[d.mood] || '') + ' ' + d.mood + '</span>';
-    html += '<span style="color:var(--text-muted);font-size:12px;">' + time + '</span>';
+    html += '<span style="color:var(--text-muted);font-size:13px;">' + time + '</span>';
     html += '</div>';
     html += '<div class="diary-title">' + esc(d.title) + '</div>';
     if (d.content) html += '<div class="diary-content">' + esc(d.content) + '</div>';
