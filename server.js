@@ -68,6 +68,9 @@ async function initDB() {
   // 迁移已有数据：completed=1 → status='completed'
   try { await db.exec("UPDATE tasks SET status = 'completed' WHERE completed = 1 AND (status = 'pending' OR status IS NULL)"); } catch (e) { /* 忽略 */ }
 
+  // v2.3 完成说明：给 tasks 表增加 completion_note 字段
+  try { await db.exec("ALTER TABLE tasks ADD COLUMN completion_note TEXT"); } catch (e) { /* 已存在 */ }
+
   // v2.2 记账功能：创建 expenses 表
   await db.exec(`
     CREATE TABLE IF NOT EXISTS expenses (
@@ -278,7 +281,7 @@ app.put('/api/tasks/:id', authMiddleware, async (req, res) => {
   const task = await db.get('SELECT * FROM tasks WHERE id = ? AND user_id = ?', [req.params.id, req.userId]);
   if (!task) return res.status(404).json({ error: '事项不存在' });
 
-  const { category, title, content, completed, priority, due_date, completed_at, status, unfinished_reason } = req.body;
+  const { category, title, content, completed, priority, due_date, completed_at, status, unfinished_reason, completion_note } = req.body;
 
   const setClauses = [];
   const params = [];
@@ -288,6 +291,7 @@ app.put('/api/tasks/:id', authMiddleware, async (req, res) => {
   if (content !== undefined) { setClauses.push('content=?'); params.push(content); }
   if (priority !== undefined) { setClauses.push('priority=?'); params.push(priority); }
   if (due_date !== undefined) { setClauses.push('due_date=?'); params.push(due_date); }
+  if (completion_note !== undefined) { setClauses.push('completion_note=?'); params.push(completion_note || null); }
 
   // 处理 status 字段的状态转换
   if (status !== undefined) {

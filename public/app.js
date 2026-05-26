@@ -541,7 +541,10 @@ async function loadTasks() {
     var result = await API.getTasks(params);
     tasksCache = result.tasks || [];
     renderTaskList(tasksCache);
-    updateTaskCounts();
+
+    // 始终拉取全量任务用于计算角标数量，避免切换选项卡后角标归零
+    var allResult = await API.getTasks({});
+    updateTaskCounts(allResult.tasks || []);
   } catch (err) { toast('加载任务失败: ' + err.message, 'error'); }
 }
 
@@ -682,6 +685,25 @@ function renderTaskList(tasks) {
     }
     html += '</div></div>';
 
+    // 已完成事项：显示完成说明
+    if (isDone) {
+      var note = t.completion_note || '';
+      html += '<div class="completion-note-area" id="cnArea-' + t.id + '">';
+      if (note) {
+        html += '<div class="completion-note-text" id="cnText-' + t.id + '">💡 ' + esc(note) + '</div>';
+      }
+      html += '<div class="completion-note-edit" id="cnEditWrap-' + t.id + '" style="display:' + (note ? 'none' : 'flex') + '">';
+      html += '<textarea id="cnInput-' + t.id + '" class="completion-note-input" placeholder="补充完成说明..." rows="2">' + esc(note) + '</textarea>';
+      html += '<button class="completion-note-save" onclick="saveCompletionNote(\'' + t.id + '\')" title="保存">💾</button>';
+      html += '</div>';
+      if (note) {
+        html += '<button class="completion-note-btn" onclick="editCompletionNote(\'' + t.id + '\')" title="编辑说明">✏️</button>';
+      } else {
+        html += '<button class="completion-note-btn" id="cnBtn-' + t.id + '" onclick="editCompletionNote(\'' + t.id + '\')" title="添加说明">＋补充说明</button>';
+      }
+      html += '</div>';
+    }
+
     // 右侧按钮
     html += '<div class="task-actions">';
     // 待办项显示"未完成"按钮
@@ -699,10 +721,11 @@ function renderTaskList(tasks) {
   list.innerHTML = html;
 }
 
-function updateTaskCounts() {
-  var pending = tasksCache.filter(function (t) { return t.status === 'pending' || (!t.status && !t.completed); });
-  var completed = tasksCache.filter(function (t) { return t.status === 'completed' || t.completed; });
-  var unfinished = tasksCache.filter(function (t) { return t.status === 'unfinished'; });
+function updateTaskCounts(allTasks) {
+  var tasks = allTasks || tasksCache;
+  var pending = tasks.filter(function (t) { return t.status === 'pending' || (!t.status && !t.completed); });
+  var completed = tasks.filter(function (t) { return t.status === 'completed' || t.completed; });
+  var unfinished = tasks.filter(function (t) { return t.status === 'unfinished'; });
   var el;
   el = document.getElementById('tcPending'); if (el) el.textContent = pending.length;
   el = document.getElementById('tcCompleted'); if (el) el.textContent = completed.length;
@@ -891,6 +914,36 @@ async function deleteTask(id) {
     await API.deleteTask(id);
     toast('事项已删除');
     await loadTasks();
+  } catch (err) { toast(err.message, 'error'); }
+}
+
+// ==================== 完成说明 ====================
+function editCompletionNote(id) {
+  var textEl = document.getElementById('cnText-' + id);
+  var editWrap = document.getElementById('cnEditWrap-' + id);
+  var btnEl = document.getElementById('cnBtn-' + id);
+  if (textEl) textEl.style.display = 'none';
+  if (editWrap) editWrap.style.display = 'flex';
+  if (btnEl) btnEl.style.display = 'none';
+  // 隐藏所有编辑按钮（如果之前有）
+  var area = document.getElementById('cnArea-' + id);
+  if (area) {
+    var btns = area.querySelectorAll('.completion-note-btn');
+    for (var i = 0; i < btns.length; i++) btns[i].style.display = 'none';
+  }
+  var input = document.getElementById('cnInput-' + id);
+  if (input) { input.focus(); input.select(); }
+}
+
+async function saveCompletionNote(id) {
+  var input = document.getElementById('cnInput-' + id);
+  if (!input) return;
+  var note = input.value.trim();
+  try {
+    await API.updateTask(id, { completion_note: note || null });
+    // 刷新当前列表
+    await loadTasks();
+    toast(note ? '完成说明已保存' : '完成说明已清空');
   } catch (err) { toast(err.message, 'error'); }
 }
 
