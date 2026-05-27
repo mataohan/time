@@ -9,8 +9,13 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'time_master_secret_2025';
 const SALT_ROUNDS = 10;
+const IS_PRODUCTION = process.env.NODE_ENV === 'production';
 
-app.use(cors());
+// CORS：生产环境允许 Render 域名，开发环境允许所有来源
+const corsOptions = IS_PRODUCTION
+  ? { origin: process.env.CORS_ORIGIN || '*', credentials: true }
+  : { origin: '*', credentials: true };
+app.use(cors(corsOptions));
 app.use(express.json());
 app.use(express.static(path.join(process.cwd(), 'public')));
 
@@ -124,7 +129,8 @@ async function initDB() {
 function authMiddleware(req, res, next) {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ error: '未授权访问' });
+    console.log(`[AUTH] 拒绝: 未携带令牌 (${req.method} ${req.path})`);
+    return res.status(401).json({ error: '未授权访问，请先登录' });
   }
   try {
     const token = authHeader.split(' ')[1];
@@ -133,21 +139,62 @@ function authMiddleware(req, res, next) {
     req.userEmail = decoded.email;
     next();
   } catch (err) {
-    return res.status(401).json({ error: '令牌无效或已过期' });
+    console.log(`[AUTH] 拒绝: 令牌无效 (${req.method} ${req.path}) - ${err.message}`);
+    return res.status(401).json({ error: '登录已过期，请重新登录' });
   }
 }
+
+// ========== 健康检查 ==========
+app.get('/api/health', async (req, res) => {
+  let dbStatus = 'disconnected';
+  try {
+    await db.get('SELECT 1');
+    dbStatus = 'connected';
+  } catch (e) {
+    dbStatus = 'error: ' + e.message;
+  }
+  res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    environment: IS_PRODUCTION ? 'production' : 'development',
+    database: dbStatus,
+    uptime: Math.floor(process.uptime()) + 's'
+  });
+});
 
 // ========== 认证路由 ==========
 
 app.post('/api/register', async (req, res) => {
   try {
     const { email, password, nickname } = req.body;
-    if (!email || !password) return res.status(400).json({ error: '邮箱和密码不能为空' });
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: '邮箱格式不正确' });
-    if (password.length < 6) return res.status(400).json({ error: '密码至少6位' });
+    console.log(`[REGISTER] 收到注册请求: email=${email}`);
+
+    if (!email || !password) {
+      console.log(`[REGISTER] 拒绝: 邮箱或密码为空`);
+      return res.status(400).json({ error: '邮箱和密码不能为空' });
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      console.log(`[REGISTER] 拒绝: 邮箱格式不正确`);
+      return res.status(400).json({ error: '邮箱格式不正确' });
+    }
+    if (password.length < 6) {
+      console.log(`[REGISTER] 拒绝: 密码过短`);
+      return res.status(400).json({ error: '密码至少6位' });
+    }
+
+    // 检查数据库连接
+    try {
+      await db.get('SELECT 1');
+    } catch (dbErr) {
+      console.error(`[REGISTER] 数据库连接失败:`, dbErr.message);
+      return res.status(500).json({ error: '数据库连接失败，请稍后再试' });
+    }
 
     const existing = await db.get('SELECT id FROM users WHERE email = ?', [email]);
-    if (existing) return res.status(400).json({ error: '该邮箱已被注册' });
+    if (existing) {
+      console.log(`[REGISTER] 拒绝: 邮箱已注册`);
+      return res.status(400).json({ error: '该邮箱已被注册' });
+    }
 
     const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
     const user = await db.insert(
@@ -156,37 +203,58 @@ app.post('/api/register', async (req, res) => {
     );
 
     const token = jwt.sign({ userId: user.id, email }, JWT_SECRET, { expiresIn: '7d' });
+    console.log(`[REGISTER] 注册成功: userId=${user.id}, email=${email}`);
     res.json({
       message: '注册成功',
       token,
       user: { id: user.id, email, nickname: user.nickname }
     });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: '服务器错误' });
+    console.error(`[REGISTER] 服务器错误:`, err.message, err.stack);
+    res.status(500).json({ error: '服务器内部错误: ' + (IS_PRODUCTION ? '请稍后再试' : err.message) });
   }
 });
 
 app.post('/api/login', async (req, res) => {
   try {
     const { email, password } = req.body;
-    if (!email || !password) return res.status(400).json({ error: '邮箱和密码不能为空' });
+    console.log(`[LOGIN] 收到登录请求: email=${email}`);
+
+    if (!email || !password) {
+      console.log(`[LOGIN] 拒绝: 邮箱或密码为空`);
+      return res.status(400).json({ error: '邮箱和密码不能为空' });
+    }
+
+    // 检查数据库连接
+    try {
+      await db.get('SELECT 1');
+    } catch (dbErr) {
+      console.error(`[LOGIN] 数据库连接失败:`, dbErr.message);
+      return res.status(500).json({ error: '数据库连接失败，请稍后再试' });
+    }
 
     const user = await db.get('SELECT * FROM users WHERE email = ?', [email]);
-    if (!user) return res.status(400).json({ error: '邮箱或密码错误' });
+    if (!user) {
+      console.log(`[LOGIN] 拒绝: 用户不存在 (email=${email})`);
+      return res.status(400).json({ error: '邮箱或密码错误' });
+    }
 
     const valid = await bcrypt.compare(password, user.password);
-    if (!valid) return res.status(400).json({ error: '邮箱或密码错误' });
+    if (!valid) {
+      console.log(`[LOGIN] 拒绝: 密码错误 (email=${email})`);
+      return res.status(400).json({ error: '邮箱或密码错误' });
+    }
 
     const token = jwt.sign({ userId: user.id, email: user.email }, JWT_SECRET, { expiresIn: '7d' });
+    console.log(`[LOGIN] 登录成功: userId=${user.id}, email=${email}`);
     res.json({
       message: '登录成功',
       token,
       user: { id: user.id, email: user.email, nickname: user.nickname }
     });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: '服务器错误' });
+    console.error(`[LOGIN] 服务器错误:`, err.message, err.stack);
+    res.status(500).json({ error: '服务器内部错误: ' + (IS_PRODUCTION ? '请稍后再试' : err.message) });
   }
 });
 
@@ -618,13 +686,41 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(process.cwd(), 'public', 'index.html'));
 });
 
+// ========== 全局错误处理 ==========
+app.use((err, req, res, next) => {
+  console.error(`[ERROR] 未捕获异常:`, err.message, err.stack);
+  res.status(500).json({ error: '服务器内部错误' });
+});
+
 // ========== 启动 ==========
-db.init().then(() => initDB()).then(() => {
+console.log('========================================');
+console.log('   ⏰ 时间管理大师 v2.0');
+console.log('========================================');
+console.log(`   环境: ${IS_PRODUCTION ? '生产 (Production)' : '开发 (Development)'}`);
+console.log(`   端口: ${PORT}`);
+console.log(`   数据库类型: TiDB Cloud (MySQL)`);
+console.log(`   DATABASE_URL 已配置: ${process.env.DATABASE_URL ? '✅ 是' : '❌ 否'}`);
+console.log(`   JWT_SECRET 已配置: ${process.env.JWT_SECRET ? '✅ 是 (自定义)' : '⚠️ 否 (使用默认值)'}`);
+console.log(`   CORS: ${IS_PRODUCTION ? (process.env.CORS_ORIGIN || '允许所有来源') : '允许所有来源 (开发模式)'}`);
+console.log('========================================');
+
+db.init().then(() => {
+  console.log(`   数据库连接: ✅ 已建立`);
+  return initDB();
+}).then(() => {
   app.listen(PORT, () => {
-    console.log(`⏰ 时间管理大师 v2.0 已启动: http://localhost:${PORT}`);
-    console.log(`   数据库: TiDB Cloud (MySQL)`);
+    console.log(`   🚀 服务已启动，监听端口 ${PORT}`);
+    console.log(`   📱 访问: http://localhost:${PORT}`);
+    console.log('========================================');
   });
 }).catch(err => {
+  console.error('========================================');
   console.error('❌ 启动失败:', err.message);
+  console.error('   可能原因:');
+  console.error('   1. DATABASE_URL 环境变量未设置或格式错误');
+  console.error('   2. TiDB Cloud 集群未启动或网络不通');
+  console.error('   3. 数据库用户名/密码错误');
+  console.error('   4. IP 白名单未配置 (需在 TiDB Cloud 中添加 Render 出口 IP)');
+  console.error('========================================');
   process.exit(1);
 });

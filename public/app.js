@@ -9,9 +9,21 @@ const API = {
   async _fetch(url, options = {}) {
     const headers = { 'Content-Type': 'application/json', ...options.headers };
     if (this.token) headers['Authorization'] = 'Bearer ' + this.token;
-    const res = await fetch(API_BASE + url, { ...options, headers });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || '请求失败');
+    var res;
+    try {
+      res = await fetch(API_BASE + url, { ...options, headers });
+    } catch (networkErr) {
+      console.error('[API] 网络请求失败:', url, networkErr.message);
+      throw new Error('无法连接到服务器，请检查网络连接');
+    }
+    var data;
+    try {
+      data = await res.json();
+    } catch (jsonErr) {
+      console.error('[API] JSON 解析失败:', url, res.status, jsonErr.message);
+      throw new Error('服务器返回了无效的响应 (' + res.status + ')');
+    }
+    if (!res.ok) throw new Error(data.error || '请求失败 (' + res.status + ')');
     return data;
   },
 
@@ -180,11 +192,16 @@ document.getElementById('authForm').addEventListener('submit', async function (e
   var password = document.getElementById('password').value;
   var nickname = document.getElementById('nickname').value.trim();
   var errEl = document.getElementById('authError');
+  var submitBtn = document.getElementById('authSubmitBtn');
   errEl.style.display = 'none';
 
   if (!email || !password) { errEl.textContent = '邮箱和密码不能为空'; errEl.style.display = 'block'; return; }
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { errEl.textContent = '邮箱格式不正确'; errEl.style.display = 'block'; return; }
   if (password.length < 6) { errEl.textContent = '密码至少6位'; errEl.style.display = 'block'; return; }
+
+  // 显示加载状态
+  submitBtn.disabled = true;
+  submitBtn.textContent = '请稍候...';
 
   try {
     var result;
@@ -199,8 +216,17 @@ document.getElementById('authForm').addEventListener('submit', async function (e
     toast(result.message);
     showApp();
   } catch (err) {
-    errEl.textContent = err.message;
+    // 区分网络错误和服务端错误
+    var msg = err.message || '请求失败';
+    if (msg === 'Failed to fetch' || msg.indexOf('NetworkError') !== -1 || msg.indexOf('fetch') !== -1) {
+      msg = '无法连接到服务器，请检查网络或服务器状态';
+    }
+    errEl.textContent = msg;
     errEl.style.display = 'block';
+    console.error('[AUTH] 请求失败:', err);
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.textContent = isLogin ? '登 录' : '注 册';
   }
 });
 
