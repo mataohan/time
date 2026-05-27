@@ -132,6 +132,13 @@
 <div id="modalOverlay" class="modal-overlay" style="display:none;" onclick="if(event.target===this)closeModal()"><div class="modal" id="modalContent"></div></div>
 <div id="toastContainer"></div>
 
-<script src="app.js"></script>
+<script src="app.js" onerror="document.getElementById('jsLoadError').style.display='block'; console.error('app.js 加载失败，请检查服务器状态')"></script>
+<div id="jsLoadError" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#1a1a2e;color:#e0e0e0;padding:30px;border-radius:12px;text-align:center;z-index:99999;border:2px solid #e94560;max-width:420px;">
+  <div style="font-size:48px;margin-bottom:16px;">⚠️</div>
+  <h2 style="color:#e94560;margin-bottom:12px;">脚本加载失败</h2>
+  <p style="margin-bottom:8px;color:#a0a0b0;">可能是服务器正在启动中（Render 免费版冷启动需要 50 秒以上）</p>
+  <p style="margin-bottom:16px;color:#a0a0b0;">请稍等片刻后刷新页面，或检查网络连接</p>
+  <button onclick="location.reload()" style="background:#e94560;color:#fff;border:none;padding:10px 30px;border-radius:6px;cursor:pointer;font-size:16px;">🔄 刷新页面</button>
+</div>
 </body>
 </html>

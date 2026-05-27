@@ -17,7 +17,29 @@ const corsOptions = IS_PRODUCTION
   : { origin: '*', credentials: true };
 app.use(cors(corsOptions));
 app.use(express.json());
-app.use(express.static(path.join(process.cwd(), 'public')));
+
+// 强制设置静态文件 MIME 类型，避免 Render 代理返回错误 Content-Type
+app.use(express.static(path.join(process.cwd(), 'public'), {
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('.js')) {
+      res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+    } else if (filePath.endsWith('.css')) {
+      res.setHeader('Content-Type', 'text/css; charset=utf-8');
+    } else if (filePath.endsWith('.html')) {
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    } else if (filePath.endsWith('.json')) {
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    } else if (filePath.endsWith('.png')) {
+      res.setHeader('Content-Type', 'image/png');
+    } else if (filePath.endsWith('.jpg') || filePath.endsWith('.jpeg')) {
+      res.setHeader('Content-Type', 'image/jpeg');
+    } else if (filePath.endsWith('.svg')) {
+      res.setHeader('Content-Type', 'image/svg+xml');
+    } else if (filePath.endsWith('.ico')) {
+      res.setHeader('Content-Type', 'image/x-icon');
+    }
+  }
+}));
 
 // ========== TiDB Cloud 表初始化 ==========
 async function initDB() {
@@ -716,8 +738,13 @@ app.get('/api/stats', authMiddleware, async (req, res) => {
   });
 });
 
-// ========== SPA fallback ==========
+// ========== SPA fallback (仅对非静态资源返回 HTML，避免 JS/CSS 被错误解析) ==========
 app.get('*', (req, res) => {
+  // 如果请求路径以常见的静态资源后缀结尾，返回 404 而不是 HTML
+  const staticExts = /\.(js|css|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot|map|json|xml|txt|webmanifest)$/i;
+  if (staticExts.test(req.path)) {
+    return res.status(404).json({ error: '资源不存在' });
+  }
   res.sendFile(path.join(process.cwd(), 'public', 'index.html'));
 });
 
