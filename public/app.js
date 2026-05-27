@@ -1,10 +1,12 @@
+'use strict';
+
 // ==================== 加载检测 ====================
 // 如果 JS 文件被错误返回为 HTML 或其他非 JS 内容，此行会报 SyntaxError
 // 正常加载时，隐藏加载错误提示
 (function() {
   var errEl = document.getElementById('jsLoadError');
   if (errEl) errEl.style.display = 'none';
-  console.log('[APP] app.js 加载成功 ✅ 版本: v2.0');
+  console.log('[APP] app.js 加载成功 ✅ 版本: v2.1');
 })();
 
 // ==================== API 通信层 ====================
@@ -1353,7 +1355,7 @@ function renderPetsList() {
     // 照片区
     html += '<div class="pet-photo">';
     if (photo) {
-      html += '<img src="' + esc(photo) + '" alt="' + esc(p.name) + '" onerror="this.parentElement.innerHTML=\\'<div class=\\'pet-photo-placeholder\\'>🐱</div>\\'">';
+      html += '<img src="' + esc(photo) + '" alt="' + esc(p.name) + '" onerror="handlePetPhotoError(this)" loading="lazy">';
     } else {
       html += '<div class="pet-photo-placeholder">🐱</div>';
     }
@@ -1595,6 +1597,13 @@ async function expGoToToday() {
   expSelectedDate = today();
   populateExpMonthPicker();
   await loadExpenses();
+}
+
+// ==================== 宠物照片加载失败处理 ====================
+function handlePetPhotoError(img) {
+  if (img && img.parentElement) {
+    img.parentElement.innerHTML = '<div class="pet-photo-placeholder">🐱</div>';
+  }
 }
 
 // ==================== 键盘快捷键 ====================
