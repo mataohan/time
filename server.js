@@ -21,15 +21,25 @@ app.use(express.static(path.join(process.cwd(), 'public')));
 
 // ========== TiDB Cloud 表初始化 ==========
 async function initDB() {
-  await db.exec(`
-    CREATE TABLE IF NOT EXISTS users (
-      id INT AUTO_INCREMENT PRIMARY KEY,
-      email VARCHAR(255) UNIQUE NOT NULL,
-      password VARCHAR(255) NOT NULL,
-      nickname VARCHAR(100),
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )
-  `);
+  console.log('[INIT] 开始检查数据库表...');
+
+  // 兜底：确保 users 表存在（最关键的登录依赖）
+  try {
+    await db.exec(`
+      CREATE TABLE IF NOT EXISTS users (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        email VARCHAR(255) UNIQUE NOT NULL,
+        password VARCHAR(255) NOT NULL,
+        nickname VARCHAR(100),
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    const userCount = await db.get('SELECT COUNT(*) as cnt FROM users');
+    console.log(`[INIT] users 表就绪，现有 ${userCount.cnt} 个用户`);
+  } catch (err) {
+    console.error('[INIT] ❌ 创建 users 表失败:', err.message);
+    throw err;
+  }
   await db.exec(`
     CREATE TABLE IF NOT EXISTS diaries (
       id INT AUTO_INCREMENT PRIMARY KEY,
@@ -147,53 +157,68 @@ function authMiddleware(req, res, next) {
 // ========== 健康检查 ==========
 app.get('/api/health', async (req, res) => {
   let dbStatus = 'disconnected';
+  let dbDetail = '';
+  let userCount = 0;
   try {
-    await db.get('SELECT 1');
+    const [dbCheck, userResult] = await Promise.all([
+      db.get('SELECT 1').catch(e => { throw e; }),
+      db.get('SELECT COUNT(*) as cnt FROM users').catch(() => null)
+    ]);
     dbStatus = 'connected';
+    if (userResult) userCount = userResult.cnt;
   } catch (e) {
-    dbStatus = 'error: ' + e.message;
+    dbStatus = 'error';
+    dbDetail = e.message;
   }
   res.json({
     status: 'ok',
     timestamp: new Date().toISOString(),
     environment: IS_PRODUCTION ? 'production' : 'development',
+    nodeVersion: process.version,
     database: dbStatus,
-    uptime: Math.floor(process.uptime()) + 's'
+    dbDetail: dbDetail || null,
+    userCount: userCount,
+    uptime: Math.floor(process.uptime()) + 's',
+    memory: Math.round(process.memoryUsage().heapUsed / 1024 / 1024) + 'MB'
   });
 });
 
 // ========== 认证路由 ==========
 
 app.post('/api/register', async (req, res) => {
+  const startTime = Date.now();
   try {
     const { email, password, nickname } = req.body;
     console.log(`[REGISTER] 收到注册请求: email=${email}`);
 
     if (!email || !password) {
       console.log(`[REGISTER] 拒绝: 邮箱或密码为空`);
-      return res.status(400).json({ error: '邮箱和密码不能为空' });
+      return res.status(400).json({ success: false, error: '邮箱和密码不能为空' });
     }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       console.log(`[REGISTER] 拒绝: 邮箱格式不正确`);
-      return res.status(400).json({ error: '邮箱格式不正确' });
+      return res.status(400).json({ success: false, error: '邮箱格式不正确' });
     }
     if (password.length < 6) {
       console.log(`[REGISTER] 拒绝: 密码过短`);
-      return res.status(400).json({ error: '密码至少6位' });
+      return res.status(400).json({ success: false, error: '密码至少6位' });
     }
 
-    // 检查数据库连接
+    // 检查数据库连接（带超时）
     try {
-      await db.get('SELECT 1');
+      await Promise.race([
+        db.get('SELECT 1'),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('数据库查询超时(5s)')), 5000))
+      ]);
     } catch (dbErr) {
       console.error(`[REGISTER] 数据库连接失败:`, dbErr.message);
-      return res.status(500).json({ error: '数据库连接失败，请稍后再试' });
+      return res.status(500).json({ success: false, error: '数据库连接失败，请稍后再试' });
     }
 
     const existing = await db.get('SELECT id FROM users WHERE email = ?', [email]);
     if (existing) {
       console.log(`[REGISTER] 拒绝: 邮箱已注册`);
-      return res.status(400).json({ error: '该邮箱已被注册' });
+      return res.status(400).json({ success: false, error: '该邮箱已被注册' });
     }
 
     const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
@@ -203,58 +228,68 @@ app.post('/api/register', async (req, res) => {
     );
 
     const token = jwt.sign({ userId: user.id, email }, JWT_SECRET, { expiresIn: '7d' });
-    console.log(`[REGISTER] 注册成功: userId=${user.id}, email=${email}`);
+    const elapsed = Date.now() - startTime;
+    console.log(`[REGISTER] 注册成功: userId=${user.id}, email=${email} (${elapsed}ms)`);
     res.json({
+      success: true,
       message: '注册成功',
       token,
       user: { id: user.id, email, nickname: user.nickname }
     });
   } catch (err) {
-    console.error(`[REGISTER] 服务器错误:`, err.message, err.stack);
-    res.status(500).json({ error: '服务器内部错误: ' + (IS_PRODUCTION ? '请稍后再试' : err.message) });
+    const elapsed = Date.now() - startTime;
+    console.error(`[REGISTER] 服务器错误 (${elapsed}ms):`, err.message, err.stack);
+    res.status(500).json({ success: false, error: '服务器内部错误: ' + (IS_PRODUCTION ? '请稍后再试' : err.message) });
   }
 });
 
 app.post('/api/login', async (req, res) => {
+  const startTime = Date.now();
   try {
     const { email, password } = req.body;
     console.log(`[LOGIN] 收到登录请求: email=${email}`);
 
     if (!email || !password) {
       console.log(`[LOGIN] 拒绝: 邮箱或密码为空`);
-      return res.status(400).json({ error: '邮箱和密码不能为空' });
+      return res.status(400).json({ success: false, error: '邮箱和密码不能为空' });
     }
 
-    // 检查数据库连接
+    // 检查数据库连接（带超时）
     try {
-      await db.get('SELECT 1');
+      await Promise.race([
+        db.get('SELECT 1'),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('数据库查询超时(5s)')), 5000))
+      ]);
     } catch (dbErr) {
       console.error(`[LOGIN] 数据库连接失败:`, dbErr.message);
-      return res.status(500).json({ error: '数据库连接失败，请稍后再试' });
+      return res.status(500).json({ success: false, error: '数据库连接失败，请稍后再试' });
     }
 
     const user = await db.get('SELECT * FROM users WHERE email = ?', [email]);
     if (!user) {
       console.log(`[LOGIN] 拒绝: 用户不存在 (email=${email})`);
-      return res.status(400).json({ error: '邮箱或密码错误' });
+      return res.status(400).json({ success: false, error: '邮箱或密码错误' });
     }
 
     const valid = await bcrypt.compare(password, user.password);
     if (!valid) {
       console.log(`[LOGIN] 拒绝: 密码错误 (email=${email})`);
-      return res.status(400).json({ error: '邮箱或密码错误' });
+      return res.status(400).json({ success: false, error: '邮箱或密码错误' });
     }
 
     const token = jwt.sign({ userId: user.id, email: user.email }, JWT_SECRET, { expiresIn: '7d' });
-    console.log(`[LOGIN] 登录成功: userId=${user.id}, email=${email}`);
+    const elapsed = Date.now() - startTime;
+    console.log(`[LOGIN] 登录成功: userId=${user.id}, email=${email} (${elapsed}ms)`);
     res.json({
+      success: true,
       message: '登录成功',
       token,
       user: { id: user.id, email: user.email, nickname: user.nickname }
     });
   } catch (err) {
-    console.error(`[LOGIN] 服务器错误:`, err.message, err.stack);
-    res.status(500).json({ error: '服务器内部错误: ' + (IS_PRODUCTION ? '请稍后再试' : err.message) });
+    const elapsed = Date.now() - startTime;
+    console.error(`[LOGIN] 服务器错误 (${elapsed}ms):`, err.message, err.stack);
+    res.status(500).json({ success: false, error: '服务器内部错误: ' + (IS_PRODUCTION ? '请稍后再试' : err.message) });
   }
 });
 

@@ -9,13 +9,28 @@ const API = {
   async _fetch(url, options = {}) {
     const headers = { 'Content-Type': 'application/json', ...options.headers };
     if (this.token) headers['Authorization'] = 'Bearer ' + this.token;
+
+    // 默认 15 秒超时
+    const timeoutMs = options.timeout || 15000;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(function () { controller.abort(); }, timeoutMs);
+    var fetchOptions = { ...options, headers, signal: controller.signal };
+    delete fetchOptions.timeout; // 移除自定义字段
+
     var res;
     try {
-      res = await fetch(API_BASE + url, { ...options, headers });
+      res = await fetch(API_BASE + url, fetchOptions);
     } catch (networkErr) {
+      clearTimeout(timeoutId);
+      if (networkErr.name === 'AbortError') {
+        console.error('[API] 请求超时:', url, '(' + timeoutMs + 'ms)');
+        throw new Error('请求超时，服务器可能无响应，请稍后重试');
+      }
       console.error('[API] 网络请求失败:', url, networkErr.message);
       throw new Error('无法连接到服务器，请检查网络连接');
     }
+    clearTimeout(timeoutId);
+
     var data;
     try {
       data = await res.json();
@@ -203,31 +218,63 @@ document.getElementById('authForm').addEventListener('submit', async function (e
   submitBtn.disabled = true;
   submitBtn.textContent = '请稍候...';
 
+  // 先快速检查服务器健康状态（2s 超时）
+  var serverOk = false;
   try {
-    var result;
-    if (isLogin) {
-      result = await API.login({ email: email, password: password });
-    } else {
-      result = await API.register({ email: email, password: password, nickname: nickname });
+    var health = await API._fetch('/api/health', { timeout: 3000 });
+    if (health.status === 'ok') {
+      serverOk = true;
+      console.log('[AUTH] 健康检查通过:', health.database);
     }
-    API.setToken(result.token);
-    user = result.user;
-    localStorage.setItem('tm_user', JSON.stringify(user));
-    toast(result.message);
-    showApp();
-  } catch (err) {
-    // 区分网络错误和服务端错误
-    var msg = err.message || '请求失败';
-    if (msg === 'Failed to fetch' || msg.indexOf('NetworkError') !== -1 || msg.indexOf('fetch') !== -1) {
-      msg = '无法连接到服务器，请检查网络或服务器状态';
-    }
-    errEl.textContent = msg;
+  } catch (healthErr) {
+    console.warn('[AUTH] 健康检查失败:', healthErr.message);
+  }
+
+  if (!serverOk) {
+    errEl.textContent = '服务器暂时无法连接，请检查服务器状态或稍后再试';
     errEl.style.display = 'block';
-    console.error('[AUTH] 请求失败:', err);
-  } finally {
     submitBtn.disabled = false;
     submitBtn.textContent = isLogin ? '登 录' : '注 册';
+    return;
   }
+
+  // 重试逻辑：最多尝试 2 次
+  var lastError = null;
+  for (var attempt = 1; attempt <= 2; attempt++) {
+    try {
+      var result;
+      if (isLogin) {
+        result = await API.login({ email: email, password: password });
+      } else {
+        result = await API.register({ email: email, password: password, nickname: nickname });
+      }
+      API.setToken(result.token);
+      user = result.user;
+      localStorage.setItem('tm_user', JSON.stringify(user));
+      toast(result.message || '登录成功');
+      showApp();
+      return; // 成功，直接返回
+    } catch (err) {
+      lastError = err;
+      console.error('[AUTH] 第' + attempt + '次尝试失败:', err.message);
+      if (attempt < 2) {
+        // 等待 1 秒后重试
+        submitBtn.textContent = '重试中... (' + attempt + '/2)';
+        await new Promise(function (r) { setTimeout(r, 1000); });
+      }
+    }
+  }
+
+  // 所有尝试都失败了
+  var msg = (lastError && lastError.message) || '请求失败';
+  if (msg === 'Failed to fetch' || msg.indexOf('NetworkError') !== -1 || msg.indexOf('fetch') !== -1) {
+    msg = '无法连接到服务器，请检查网络或服务器状态';
+  }
+  errEl.textContent = msg;
+  errEl.style.display = 'block';
+  console.error('[AUTH] 请求失败:', lastError);
+  submitBtn.disabled = false;
+  submitBtn.textContent = isLogin ? '登 录' : '注 册';
 });
 
 async function logout() {
