@@ -71,6 +71,37 @@ async function initDB() {
   // v2.3 完成说明：给 tasks 表增加 completion_note 字段
   try { await db.exec("ALTER TABLE tasks ADD COLUMN completion_note TEXT"); } catch (e) { /* 已存在 */ }
 
+  // v2.4 宠物档案：创建 pets 表
+  await db.exec(`
+    CREATE TABLE IF NOT EXISTS pets (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      user_id INT NOT NULL,
+      name VARCHAR(50) NOT NULL,
+      birth_date DATE,
+      photo_url VARCHAR(500),
+      species VARCHAR(20) DEFAULT 'cat',
+      breed VARCHAR(50),
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `);
+
+  // v2.4 宠物健康事件表
+  await db.exec(`
+    CREATE TABLE IF NOT EXISTS pet_health_events (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      pet_id INT NOT NULL,
+      event_type VARCHAR(30) NOT NULL,
+      event_date DATE NOT NULL,
+      title VARCHAR(100),
+      notes TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      FOREIGN KEY (pet_id) REFERENCES pets(id) ON DELETE CASCADE
+    )
+  `);
+
   // v2.2 记账功能：创建 expenses 表
   await db.exec(`
     CREATE TABLE IF NOT EXISTS expenses (
@@ -427,6 +458,131 @@ app.delete('/api/expenses/:id', authMiddleware, async (req, res) => {
   const changes = await db.change('DELETE FROM expenses WHERE id = ? AND user_id = ?', [req.params.id, req.userId]);
   if (changes === 0) return res.status(404).json({ error: '消费记录不存在' });
   res.json({ message: '删除成功' });
+});
+
+// ========== 宠物档案路由 ==========
+
+// 获取当前用户所有宠物（含最近3条健康事件）
+app.get('/api/pets', authMiddleware, async (req, res) => {
+  const pets = await db.all(
+    'SELECT * FROM pets WHERE user_id = ? ORDER BY created_at DESC',
+    [req.userId]
+  );
+  // 为每只宠物附带最近3条健康事件
+  for (const pet of pets) {
+    pet.recent_events = await db.all(
+      'SELECT * FROM pet_health_events WHERE pet_id = ? ORDER BY event_date DESC LIMIT 3',
+      [pet.id]
+    );
+  }
+  res.json({ pets });
+});
+
+// 新增宠物
+app.post('/api/pets', authMiddleware, async (req, res) => {
+  const { name, birth_date, photo_url, species, breed } = req.body;
+  if (!name) return res.status(400).json({ error: '宠物名字不能为空' });
+  const pet = await db.insert(
+    'INSERT INTO pets (user_id, name, birth_date, photo_url, species, breed) VALUES (?, ?, ?, ?, ?, ?)',
+    [req.userId, name, birth_date || null, photo_url || null, species || 'cat', breed || null]
+  );
+  const created = await db.get('SELECT * FROM pets WHERE id = ?', [pet.id]);
+  created.recent_events = [];
+  res.json({ message: '宠物添加成功', pet: created });
+});
+
+// 修改宠物
+app.put('/api/pets/:id', authMiddleware, async (req, res) => {
+  const pet = await db.get('SELECT * FROM pets WHERE id = ? AND user_id = ?', [req.params.id, req.userId]);
+  if (!pet) return res.status(404).json({ error: '宠物不存在' });
+  const { name, birth_date, photo_url, species, breed } = req.body;
+  await db.run(
+    'UPDATE pets SET name=?, birth_date=?, photo_url=?, species=?, breed=?, updated_at=CURRENT_TIMESTAMP WHERE id=? AND user_id=?',
+    [
+      name !== undefined ? name : pet.name,
+      birth_date !== undefined ? birth_date : pet.birth_date,
+      photo_url !== undefined ? photo_url : pet.photo_url,
+      species !== undefined ? species : pet.species,
+      breed !== undefined ? breed : pet.breed,
+      req.params.id, req.userId
+    ]
+  );
+  const updated = await db.get('SELECT * FROM pets WHERE id = ?', [req.params.id]);
+  updated.recent_events = await db.all(
+    'SELECT * FROM pet_health_events WHERE pet_id = ? ORDER BY event_date DESC LIMIT 3',
+    [req.params.id]
+  );
+  res.json({ message: '宠物信息已更新', pet: updated });
+});
+
+// 删除宠物（级联删除健康事件）
+app.delete('/api/pets/:id', authMiddleware, async (req, res) => {
+  const changes = await db.change('DELETE FROM pets WHERE id = ? AND user_id = ?', [req.params.id, req.userId]);
+  if (changes === 0) return res.status(404).json({ error: '宠物不存在' });
+  res.json({ message: '宠物已删除' });
+});
+
+// ========== 健康事件路由 ==========
+
+// 获取某只宠物的所有健康事件
+app.get('/api/pets/:petId/events', authMiddleware, async (req, res) => {
+  const pet = await db.get('SELECT * FROM pets WHERE id = ? AND user_id = ?', [req.params.petId, req.userId]);
+  if (!pet) return res.status(404).json({ error: '宠物不存在' });
+  const events = await db.all(
+    'SELECT * FROM pet_health_events WHERE pet_id = ? ORDER BY event_date DESC',
+    [req.params.petId]
+  );
+  res.json({ events });
+});
+
+// 添加健康事件
+app.post('/api/pets/:petId/events', authMiddleware, async (req, res) => {
+  const pet = await db.get('SELECT * FROM pets WHERE id = ? AND user_id = ?', [req.params.petId, req.userId]);
+  if (!pet) return res.status(404).json({ error: '宠物不存在' });
+  const { event_type, event_date, title, notes } = req.body;
+  if (!event_type || !event_date) return res.status(400).json({ error: '事件类型和日期不能为空' });
+  if (!['vaccine', 'deworm', 'vet_visit', 'other'].includes(event_type)) {
+    return res.status(400).json({ error: '无效的事件类型' });
+  }
+  const event = await db.insert(
+    'INSERT INTO pet_health_events (pet_id, event_type, event_date, title, notes) VALUES (?, ?, ?, ?, ?)',
+    [req.params.petId, event_type, event_date, title || null, notes || null]
+  );
+  const created = await db.get('SELECT * FROM pet_health_events WHERE id = ?', [event.id]);
+  res.json({ message: '健康事件已添加', event: created });
+});
+
+// 修改健康事件
+app.put('/api/pets/:petId/events/:eventId', authMiddleware, async (req, res) => {
+  const pet = await db.get('SELECT * FROM pets WHERE id = ? AND user_id = ?', [req.params.petId, req.userId]);
+  if (!pet) return res.status(404).json({ error: '宠物不存在' });
+  const ev = await db.get('SELECT * FROM pet_health_events WHERE id = ? AND pet_id = ?', [req.params.eventId, req.params.petId]);
+  if (!ev) return res.status(404).json({ error: '健康事件不存在' });
+  const { event_type, event_date, title, notes } = req.body;
+  await db.run(
+    'UPDATE pet_health_events SET event_type=?, event_date=?, title=?, notes=?, updated_at=CURRENT_TIMESTAMP WHERE id=? AND pet_id=?',
+    [
+      event_type !== undefined ? event_type : ev.event_type,
+      event_date !== undefined ? event_date : ev.event_date,
+      title !== undefined ? title : ev.title,
+      notes !== undefined ? notes : ev.notes,
+      req.params.eventId, req.params.petId
+    ]
+  );
+  const updated = await db.get('SELECT * FROM pet_health_events WHERE id = ?', [req.params.eventId]);
+  res.json({ message: '健康事件已更新', event: updated });
+});
+
+// 删除健康事件
+app.delete('/api/pets/:petId/events/:eventId', authMiddleware, async (req, res) => {
+  const pet = await db.get('SELECT * FROM pets WHERE id = ? AND user_id = ?', [req.params.petId, req.userId]);
+  if (!pet) return res.status(404).json({ error: '宠物不存在' });
+  const changes = await db.change(
+    'DELETE FROM pet_health_events WHERE id = ? AND pet_id = ?',
+    [req.params.eventId, req.params.petId]
+  );
+  if (changes === 0) return res.status(404).json({ error: '健康事件不存在' });
+  res.json({ message: '健康事件已删除' });
 });
 
 // ========== 统计 ==========

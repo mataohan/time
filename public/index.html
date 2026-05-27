@@ -36,6 +36,7 @@
     <button class="tab-btn active" onclick="switchTab('calendar')">📅 日历手账</button>
     <button class="tab-btn" onclick="switchTab('tasks')">✅ 待办事项 <span class="tab-badge" id="pendingBadge">0</span></button>
     <button class="tab-btn" onclick="switchTab('expenses')">💰 记账</button>
+    <button class="tab-btn" onclick="switchTab('pets')">🐱 宠物档案</button>
   </div>
   <div class="content-area">
 
@@ -83,6 +84,17 @@
       <div class="task-list-panel">
         <div class="task-list-header"><h3 id="taskListTitle">全部待办事项</h3><button class="btn-add" onclick="openTaskModal()">+ 新增事项</button></div>
         <div class="task-list" id="taskList"><div class="empty-state"><div class="empty-icon">📝</div><p>暂无待办事项</p></div></div>
+      </div>
+    </div>
+
+    <!-- 宠物档案板块 -->
+    <div id="petsTab" class="pets-section" style="display:none;">
+      <div class="pets-header">
+        <h2>🐱 宠物档案</h2>
+        <button class="btn-add" onclick="openPetModal()">+ 新宠物</button>
+      </div>
+      <div class="pets-grid" id="petsGrid">
+        <div class="empty-state"><div class="empty-icon">🐱</div><p>还没有添加宠物，点击上方按钮添加吧</p></div>
       </div>
     </div>
 

@@ -51,7 +51,18 @@ const API = {
   getExpenses: (params) => API.get('/api/expenses?' + new URLSearchParams(params).toString()),
   createExpense: (b) => API.post('/api/expenses', b),
   updateExpense: (id, b) => API.put('/api/expenses/' + id, b),
-  deleteExpense: (id) => API.del('/api/expenses/' + id)
+  deleteExpense: (id) => API.del('/api/expenses/' + id),
+
+  // ---- 宠物档案 ----
+  getPets: () => API.get('/api/pets'),
+  createPet: (b) => API.post('/api/pets', b),
+  updatePet: (id, b) => API.put('/api/pets/' + id, b),
+  deletePet: (id) => API.del('/api/pets/' + id),
+  // ---- 健康事件 ----
+  getHealthEvents: (petId) => API.get('/api/pets/' + petId + '/events'),
+  createHealthEvent: (petId, b) => API.post('/api/pets/' + petId + '/events', b),
+  updateHealthEvent: (petId, eventId, b) => API.put('/api/pets/' + petId + '/events/' + eventId, b),
+  deleteHealthEvent: (petId, eventId) => API.del('/api/pets/' + petId + '/events/' + eventId)
 };
 
 // ==================== 全局状态 ====================
@@ -81,6 +92,19 @@ const EXP_EMOJI = { 餐饮: '🍜', 购物: '🛒', 交通: '🚗', 娱乐: '�
 const EXP_CSS = { 餐饮: 'dining', 购物: 'shopping', 交通: 'transport', 娱乐: 'entertainment', 医疗: 'medical', 其他: 'other' };
 
 let expYear, expMonth, expSelectedDate, expensesCache = [];
+
+const HEALTH_EVENT_TYPES = [
+  { key: 'vaccine', label: '疫苗', emoji: '💉', css: 'vaccine' },
+  { key: 'deworm', label: '驱虫', emoji: '🐛', css: 'deworm' },
+  { key: 'vet_visit', label: '就诊', emoji: '🏥', css: 'vet-visit' },
+  { key: 'other', label: '其他', emoji: '📋', css: 'other-event' }
+];
+const HEALTH_TYPE_MAP = {};
+for (var _hi = 0; _hi < HEALTH_EVENT_TYPES.length; _hi++) {
+  HEALTH_TYPE_MAP[HEALTH_EVENT_TYPES[_hi].key] = HEALTH_EVENT_TYPES[_hi];
+}
+let petsCache = [];
+let petEventCache = {};
 
 // ==================== 工具 ====================
 function toast(msg, type) {
@@ -217,19 +241,29 @@ function switchTab(tab) {
     document.getElementById('calendarTab').style.display = 'grid';
     document.getElementById('tasksTab').style.display = 'none';
     document.getElementById('expensesTab').style.display = 'none';
+    document.getElementById('petsTab').style.display = 'none';
     loadDiaries();
   } else if (tab === 'tasks') {
     btns[1].classList.add('active');
     document.getElementById('calendarTab').style.display = 'none';
     document.getElementById('tasksTab').style.display = 'grid';
     document.getElementById('expensesTab').style.display = 'none';
+    document.getElementById('petsTab').style.display = 'none';
     loadTasks();
   } else if (tab === 'expenses') {
     btns[2].classList.add('active');
     document.getElementById('calendarTab').style.display = 'none';
     document.getElementById('tasksTab').style.display = 'none';
+    document.getElementById('petsTab').style.display = 'none';
     document.getElementById('expensesTab').style.display = 'block';
     initExpenses();
+  } else if (tab === 'pets') {
+    btns[3].classList.add('active');
+    document.getElementById('calendarTab').style.display = 'none';
+    document.getElementById('tasksTab').style.display = 'none';
+    document.getElementById('expensesTab').style.display = 'none';
+    document.getElementById('petsTab').style.display = 'block';
+    loadPets();
   }
 }
 
@@ -1195,6 +1229,252 @@ async function deleteExpense(id) {
     await API.deleteExpense(id);
     toast('消费记录已删除');
     await loadExpenses();
+  } catch (err) { toast(err.message, 'error'); }
+}
+
+// ==================== 宠物档案 ====================
+async function loadPets() {
+  try {
+    var result = await API.getPets();
+    petsCache = result.pets || [];
+    renderPetsList();
+  } catch (err) { toast('加载宠物失败: ' + err.message, 'error'); }
+}
+
+function calcAge(birthDate) {
+  if (!birthDate) return '';
+  var bd = new Date(birthDate);
+  if (isNaN(bd.getTime())) return '';
+  var now = new Date();
+  var years = now.getFullYear() - bd.getFullYear();
+  var months = now.getMonth() - bd.getMonth();
+  if (months < 0) { years--; months += 12; }
+  if (years > 0) return years + '岁' + (months > 0 ? months + '个月' : '');
+  return months + '个月';
+}
+
+function renderPetsList() {
+  var grid = document.getElementById('petsGrid');
+  if (!grid) return;
+
+  if (petsCache.length === 0) {
+    grid.innerHTML = '<div class="empty-state"><div class="empty-icon">🐱</div><p>还没有添加宠物，点击上方按钮添加吧</p></div>';
+    return;
+  }
+
+  var html = '';
+  for (var i = 0; i < petsCache.length; i++) {
+    var p = petsCache[i];
+    var age = calcAge(p.birth_date);
+    var photo = p.photo_url || '';
+    html += '<div class="pet-card">';
+    // 照片区
+    html += '<div class="pet-photo">';
+    if (photo) {
+      html += '<img src="' + esc(photo) + '" alt="' + esc(p.name) + '" onerror="this.parentElement.innerHTML=\\'<div class=\\'pet-photo-placeholder\\'>🐱</div>\\'">';
+    } else {
+      html += '<div class="pet-photo-placeholder">🐱</div>';
+    }
+    html += '</div>';
+    // 信息区
+    html += '<div class="pet-info">';
+    html += '<div class="pet-name-row"><span class="pet-name">' + esc(p.name) + '</span>';
+    if (p.breed) html += '<span class="pet-breed">' + esc(p.breed) + '</span>';
+    html += '</div>';
+    html += '<div class="pet-meta">';
+    if (p.birth_date) html += '<span class="pet-meta-item">🎂 ' + p.birth_date + (age ? ' (' + age + ')' : '') + '</span>';
+    html += '<span class="pet-meta-item">🐾 ' + (p.species === 'cat' ? '猫咪' : p.species) + '</span>';
+    html += '</div>';
+    // 操作按钮
+    html += '<div class="pet-card-actions">';
+    html += '<button class="pet-action-btn" onclick="openHealthEventModal(\'' + p.id + '\')" title="添加健康事件">➕ 健康事件</button>';
+    html += '<button class="pet-action-btn" onclick="openPetModal(\'' + p.id + '\')" title="编辑档案">✏️ 编辑档案</button>';
+    html += '<button class="pet-action-btn pet-action-del" onclick="deletePet(\'' + p.id + '\')" title="删除">🗑️</button>';
+    html += '</div>';
+    // 最近健康事件摘要
+    if (p.recent_events && p.recent_events.length > 0) {
+      html += '<div class="pet-health-preview">';
+      html += '<div class="pet-health-title">📋 最近健康记录</div>';
+      for (var j = 0; j < p.recent_events.length; j++) {
+        var ev = p.recent_events[j];
+        var typeCfg = HEALTH_TYPE_MAP[ev.event_type] || HEALTH_TYPE_MAP['other'];
+        html += '<div class="pet-health-item">';
+        html += '<span class="pet-health-tag health-tag-' + typeCfg.css + '">' + typeCfg.emoji + ' ' + typeCfg.label + '</span>';
+        html += '<span class="pet-health-date">' + ev.event_date + '</span>';
+        if (ev.title) html += '<span class="pet-health-evtitle">' + esc(ev.title) + '</span>';
+        html += '</div>';
+      }
+      html += '<button class="pet-view-all-btn" onclick="viewAllHealthEvents(\'' + p.id + '\')">查看全部健康事件 →</button>';
+      html += '</div>';
+    }
+    html += '</div></div>';
+  }
+  grid.innerHTML = html;
+}
+
+// ---- 宠物弹窗 ----
+function openPetModal(id) {
+  var pet = id ? petsCache.find(function (p) { return p.id == id; }) : null;
+  var isEdit = !!pet;
+  stopDraftAutoSave();
+  modalDirty = false;
+
+  document.getElementById('modalContent').innerHTML =
+    '<h3>' + (isEdit ? '编辑宠物档案' : '添加新宠物') + '</h3>' +
+    '<div class="modal-form-grid">' +
+    '<div class="form-group form-group-full"><label>名字 <span style="color:var(--danger)">*</span></label><input type="text" id="petName" value="' + (pet ? esc(pet.name) : '') + '" placeholder="宠物的名字" oninput="modalDirty=true"></div>' +
+    '<div class="form-group form-group-col"><label>出生日期</label><input type="date" id="petBirth" value="' + (pet && pet.birth_date ? pet.birth_date : '') + '" onchange="modalDirty=true"></div>' +
+    '<div class="form-group form-group-col"><label>品种</label><input type="text" id="petBreed" value="' + (pet ? esc(pet.breed || '') : '') + '" placeholder="如：英短、布偶" oninput="modalDirty=true"></div>' +
+    '<div class="form-group form-group-col"><label>物种</label><select id="petSpecies" onchange="modalDirty=true"><option value="cat"' + (!pet || pet.species === 'cat' ? ' selected' : '') + '>🐱 猫</option><option value="dog"' + (pet && pet.species === 'dog' ? ' selected' : '') + '>🐶 狗</option><option value="other"' + (pet && pet.species === 'other' ? ' selected' : '') + '>🐾 其他</option></select></div>' +
+    '<div class="form-group form-group-full"><label>照片URL（可选）</label><input type="url" id="petPhoto" value="' + (pet ? esc(pet.photo_url || '') : '') + '" placeholder="https://example.com/photo.jpg" oninput="modalDirty=true"></div>' +
+    '<div class="modal-actions form-group-full">' +
+    '<button class="btn-cancel" onclick="closeModal()">取消</button>' +
+    '<button class="btn-submit" onclick="savePet(\'' + (id || '') + '\')">' + (isEdit ? '保存修改' : '添加宠物') + '</button>' +
+    '</div></div>';
+  document.getElementById('modalOverlay').style.display = 'flex';
+  setTimeout(function () {
+    var el = document.getElementById('petName');
+    if (el) el.focus();
+  }, 100);
+}
+
+async function savePet(id) {
+  var name = document.getElementById('petName').value.trim();
+  var birth_date = document.getElementById('petBirth').value || null;
+  var breed = document.getElementById('petBreed').value.trim() || null;
+  var species = document.getElementById('petSpecies').value;
+  var photo_url = document.getElementById('petPhoto').value.trim() || null;
+  if (!name) { toast('请输入宠物名字', 'error'); return; }
+
+  try {
+    if (id) {
+      await API.updatePet(id, { name: name, birth_date: birth_date, breed: breed, species: species, photo_url: photo_url });
+      toast('宠物信息已更新');
+    } else {
+      await API.createPet({ name: name, birth_date: birth_date, breed: breed, species: species, photo_url: photo_url });
+      toast('宠物已添加 🐱');
+    }
+    modalDirty = false;
+    closeModal();
+    await loadPets();
+  } catch (err) { toast(err.message, 'error'); }
+}
+
+async function deletePet(id) {
+  if (!confirm('确定删除这个宠物档案吗？所有健康事件记录也会被删除。')) return;
+  try {
+    await API.deletePet(id);
+    toast('宠物档案已删除');
+    await loadPets();
+  } catch (err) { toast(err.message, 'error'); }
+}
+
+// ---- 健康事件弹窗 ----
+function openHealthEventModal(petId, eventId) {
+  var ev = null;
+  if (eventId && petEventCache[petId]) {
+    ev = petEventCache[petId].find(function (e) { return e.id == eventId; });
+  }
+  var isEdit = !!ev;
+  stopDraftAutoSave();
+  modalDirty = false;
+
+  var typeOpts = '';
+  for (var i = 0; i < HEALTH_EVENT_TYPES.length; i++) {
+    var t = HEALTH_EVENT_TYPES[i];
+    typeOpts += '<option value="' + t.key + '" ' + (ev && ev.event_type === t.key ? 'selected' : '') + '>' + t.emoji + ' ' + t.label + '</option>';
+  }
+
+  var evDate = ev ? ev.event_date : today();
+  document.getElementById('modalContent').innerHTML =
+    '<h3>' + (isEdit ? '编辑健康事件' : '添加健康事件') + '</h3>' +
+    '<div class="modal-form-grid">' +
+    '<div class="form-group form-group-col"><label>事件类型</label><select id="evType" onchange="modalDirty=true">' + typeOpts + '</select></div>' +
+    '<div class="form-group form-group-col"><label>日期 <span style="color:var(--danger)">*</span></label><input type="date" id="evDate" value="' + evDate + '" onchange="modalDirty=true"></div>' +
+    '<div class="form-group form-group-full"><label>标题</label><input type="text" id="evTitle" value="' + (ev ? esc(ev.title || '') : '') + '" placeholder="如：狂犬疫苗第一针" oninput="modalDirty=true"></div>' +
+    '<div class="form-group form-group-full"><label>备注</label><textarea id="evNotes" placeholder="如：下次加强针时间为..." oninput="modalDirty=true">' + (ev ? esc(ev.notes || '') : '') + '</textarea></div>' +
+    '<div class="modal-actions form-group-full">' +
+    '<button class="btn-cancel" onclick="closeModal()">取消</button>' +
+    '<button class="btn-submit" onclick="saveHealthEvent(\'' + petId + '\', \'' + (eventId || '') + '\')">' + (isEdit ? '保存修改' : '添加事件') + '</button>' +
+    '</div></div>';
+  document.getElementById('modalOverlay').style.display = 'flex';
+  setTimeout(function () {
+    var el = document.getElementById('evTitle');
+    if (el) el.focus();
+  }, 100);
+}
+
+async function saveHealthEvent(petId, eventId) {
+  var event_type = document.getElementById('evType').value;
+  var event_date = document.getElementById('evDate').value;
+  var title = document.getElementById('evTitle').value.trim() || null;
+  var notes = document.getElementById('evNotes').value.trim() || null;
+  if (!event_date) { toast('请选择日期', 'error'); return; }
+
+  try {
+    if (eventId) {
+      await API.updateHealthEvent(petId, eventId, { event_type: event_type, event_date: event_date, title: title, notes: notes });
+      toast('健康事件已更新');
+    } else {
+      await API.createHealthEvent(petId, { event_type: event_type, event_date: event_date, title: title, notes: notes });
+      toast('健康事件已添加');
+    }
+    modalDirty = false;
+    closeModal();
+    await loadPets();
+  } catch (err) { toast(err.message, 'error'); }
+}
+
+// ---- 查看全部健康事件（时间线弹窗） ----
+async function viewAllHealthEvents(petId) {
+  var pet = petsCache.find(function (p) { return p.id == petId; });
+  if (!pet) return;
+  try {
+    var result = await API.getHealthEvents(petId);
+    petEventCache[petId] = result.events || [];
+    var events = petEventCache[petId];
+    stopDraftAutoSave();
+    modalDirty = false;
+
+    var html = '<h3>📋 ' + esc(pet.name) + ' 的健康记录</h3>';
+    if (events.length === 0) {
+      html += '<div class="empty-state"><div class="empty-icon">📋</div><p>暂无健康事件记录</p></div>';
+    } else {
+      html += '<div class="health-timeline">';
+      for (var i = 0; i < events.length; i++) {
+        var ev = events[i];
+        var typeCfg = HEALTH_TYPE_MAP[ev.event_type] || HEALTH_TYPE_MAP['other'];
+        html += '<div class="health-timeline-item">';
+        html += '<div class="health-timeline-dot health-tag-' + typeCfg.css + '"></div>';
+        html += '<div class="health-timeline-content">';
+        html += '<div class="health-timeline-header">';
+        html += '<span class="pet-health-tag health-tag-' + typeCfg.css + '">' + typeCfg.emoji + ' ' + typeCfg.label + '</span>';
+        html += '<span class="pet-health-date">' + ev.event_date + '</span>';
+        html += '</div>';
+        if (ev.title) html += '<div class="health-timeline-title">' + esc(ev.title) + '</div>';
+        if (ev.notes) html += '<div class="health-timeline-notes">' + esc(ev.notes) + '</div>';
+        html += '<div class="health-timeline-actions">';
+        html += '<button class="btn-task-edit" onclick="openHealthEventModal(\'' + petId + '\', \'' + ev.id + '\')">✏️</button>';
+        html += '<button class="btn-task-del" onclick="deleteHealthEvent(\'' + petId + '\', \'' + ev.id + '\')">🗑️</button>';
+        html += '</div>';
+        html += '</div></div>';
+      }
+      html += '</div>';
+    }
+    html += '<div class="modal-actions"><button class="btn-cancel" onclick="closeModal()">关闭</button><button class="btn-submit" onclick="openHealthEventModal(\'' + petId + '\')">+ 添加事件</button></div>';
+
+    document.getElementById('modalContent').innerHTML = html;
+    document.getElementById('modalOverlay').style.display = 'flex';
+  } catch (err) { toast(err.message, 'error'); }
+}
+
+async function deleteHealthEvent(petId, eventId) {
+  if (!confirm('确定删除这条健康事件？')) return;
+  try {
+    await API.deleteHealthEvent(petId, eventId);
+    toast('健康事件已删除');
+    closeModal();
+    await loadPets();
   } catch (err) { toast(err.message, 'error'); }
 }
 
