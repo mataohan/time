@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>时间管理大师</title>
-<link rel="stylesheet" href="style.css?v=2.3">
+<link rel="stylesheet" href="style.css?v=2.4">
 </head>
 <body>
 
@@ -37,6 +37,7 @@
     <button class="tab-btn" onclick="switchTab('tasks')">✅ 待办事项 <span class="tab-badge" id="pendingBadge">0</span></button>
     <button class="tab-btn" onclick="switchTab('expenses')">💰 记账</button>
     <button class="tab-btn" onclick="switchTab('pets')">🐱 宠物档案</button>
+    <button class="tab-btn" onclick="switchTab('fitness')">🏋️ 健身计划</button>
   </div>
   <div class="content-area">
 
@@ -126,13 +127,80 @@
         </div>
       </div>
     </div>
+
+    <!-- 健身计划板块 -->
+    <div id="fitnessTab" class="fitness-section" style="display:none;">
+      <!-- 顶部统计卡片 -->
+      <div class="fitness-stats-bar">
+        <div class="fitness-stat-card">
+          <div class="fitness-stat-icon">📏</div>
+          <div class="fitness-stat-info">
+            <div class="fitness-stat-label">身体参数</div>
+            <div class="fitness-stat-value">171cm / 70kg</div>
+          </div>
+        </div>
+        <div class="fitness-stat-card">
+          <div class="fitness-stat-icon">🎯</div>
+          <div class="fitness-stat-info">
+            <div class="fitness-stat-label">目标</div>
+            <div class="fitness-stat-value">减至 65kg</div>
+          </div>
+        </div>
+        <div class="fitness-stat-card">
+          <div class="fitness-stat-icon">🔥</div>
+          <div class="fitness-stat-info">
+            <div class="fitness-stat-label">每日热量</div>
+            <div class="fitness-stat-value">1850 大卡</div>
+          </div>
+        </div>
+        <div class="fitness-stat-card">
+          <div class="fitness-stat-icon">📅</div>
+          <div class="fitness-stat-info">
+            <div class="fitness-stat-label">训练频率</div>
+            <div class="fitness-stat-value">每周 5 练</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 主体内容 -->
+      <div class="fitness-body">
+        <!-- 左：21天训练日历 -->
+        <div class="fitness-calendar-panel">
+          <div class="fitness-calendar-header">
+            <h2>📋 21天训练计划</h2>
+            <span class="fitness-date-range" id="fitnessDateRange"></span>
+          </div>
+          <div class="fitness-calendar-grid" id="fitnessCalendarGrid"></div>
+        </div>
+
+        <!-- 右：今日饮食 + 激励语 -->
+        <div class="fitness-side-panel">
+          <!-- 今日饮食建议 -->
+          <div class="fitness-meal-card">
+            <div class="fitness-meal-header">
+              <h3>🍽️ 今日饮食建议</h3>
+              <span class="fitness-meal-date" id="fitnessMealDate"></span>
+            </div>
+            <div class="fitness-meal-timeline" id="fitnessMealTimeline"></div>
+            <div class="fitness-meal-summary" id="fitnessMealSummary"></div>
+          </div>
+
+          <!-- 每日激励语 -->
+          <div class="fitness-motto-card" id="fitnessMotto">
+            <div class="fitness-motto-icon">💪</div>
+            <div class="fitness-motto-text" id="fitnessMottoText"></div>
+            <div class="fitness-motto-refresh" onclick="refreshFitnessMotto()">🔄 换一句</div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
 <div id="modalOverlay" class="modal-overlay" style="display:none;" onclick="if(event.target===this)closeModal()"><div class="modal" id="modalContent"></div></div>
 <div id="toastContainer"></div>
 
-<script src="app.js?v=2.3" onerror="document.getElementById('jsLoadError').style.display='block'; console.error('app.js 加载失败，请检查服务器状态')"></script>
+<script src="app.js?v=2.4" onerror="document.getElementById('jsLoadError').style.display='block'; console.error('app.js 加载失败，请检查服务器状态')"></script>
 <div id="jsLoadError" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#1a1a2e;color:#e0e0e0;padding:30px;border-radius:12px;text-align:center;z-index:99999;border:2px solid #e94560;max-width:420px;">
   <div style="font-size:48px;margin-bottom:16px;">⚠️</div>
   <h2 style="color:#e94560;margin-bottom:12px;">脚本加载失败</h2>

@@ -326,6 +326,7 @@ function switchTab(tab) {
     document.getElementById('tasksTab').style.display = 'none';
     document.getElementById('expensesTab').style.display = 'none';
     document.getElementById('petsTab').style.display = 'none';
+    document.getElementById('fitnessTab').style.display = 'none';
     loadDiaries();
   } else if (tab === 'tasks') {
     btns[1].classList.add('active');
@@ -333,12 +334,14 @@ function switchTab(tab) {
     document.getElementById('tasksTab').style.display = 'grid';
     document.getElementById('expensesTab').style.display = 'none';
     document.getElementById('petsTab').style.display = 'none';
+    document.getElementById('fitnessTab').style.display = 'none';
     loadTasks();
   } else if (tab === 'expenses') {
     btns[2].classList.add('active');
     document.getElementById('calendarTab').style.display = 'none';
     document.getElementById('tasksTab').style.display = 'none';
     document.getElementById('petsTab').style.display = 'none';
+    document.getElementById('fitnessTab').style.display = 'none';
     document.getElementById('expensesTab').style.display = 'block';
     initExpenses();
   } else if (tab === 'pets') {
@@ -346,8 +349,17 @@ function switchTab(tab) {
     document.getElementById('calendarTab').style.display = 'none';
     document.getElementById('tasksTab').style.display = 'none';
     document.getElementById('expensesTab').style.display = 'none';
+    document.getElementById('fitnessTab').style.display = 'none';
     document.getElementById('petsTab').style.display = 'block';
     loadPets();
+  } else if (tab === 'fitness') {
+    btns[4].classList.add('active');
+    document.getElementById('calendarTab').style.display = 'none';
+    document.getElementById('tasksTab').style.display = 'none';
+    document.getElementById('expensesTab').style.display = 'none';
+    document.getElementById('petsTab').style.display = 'none';
+    document.getElementById('fitnessTab').style.display = 'block';
+    initFitness();
   }
 }
 
@@ -1603,6 +1615,474 @@ async function expGoToToday() {
 function handlePetPhotoError(img) {
   if (img && img.parentElement) {
     img.parentElement.innerHTML = '<div class="pet-photo-placeholder">🐱</div>';
+  }
+}
+
+// ==================== 健身计划 ====================
+var fitnessInitialized = false;
+
+// 训练计划配置：21天（3周），每周5练+2休息
+var fitnessPlan = [];
+var fitnessDayMap = {}; // dateStr -> plan index
+
+function initFitness() {
+  if (!fitnessInitialized) {
+    buildFitnessPlan();
+    fitnessInitialized = true;
+  }
+  renderFitnessCalendar();
+  renderMealPlan();
+  renderFitnessMotto();
+  updateFitnessDateRange();
+}
+
+function buildFitnessPlan() {
+  var today = new Date();
+  fitnessPlan = [];
+  fitnessDayMap = {};
+
+  // 每周训练安排：周一胸+三头、周二背+二头、周三休息、周四腿+肩、周五核心+有氧、周六全身循环、周日休息
+  var weeklySchedule = [
+    { type: '胸+三头', icon: '💪', color: '#4fc3f7', isRest: false },
+    { type: '背+二头', icon: '🔙', color: '#ba68c8', isRest: false },
+    { type: '休息日', icon: '😴', color: '#5a6480', isRest: true },
+    { type: '腿+肩', icon: '🦵', color: '#ff9800', isRest: false },
+    { type: '核心+有氧', icon: '🏃', color: '#4caf50', isRest: false },
+    { type: '全身循环', icon: '🔄', color: '#ef5350', isRest: false },
+    { type: '休息日', icon: '😴', color: '#5a6480', isRest: true }
+  ];
+
+  // 每周训练详细内容
+  var weeklyDetail = [
+    { // 胸+三头
+      title: '胸肌 + 三头肌训练',
+      warmup: '跑步机快走5分钟 + 肩关节绕环 + 胸部拉伸',
+      exercises: [
+        { name: '平板史密斯机卧推', sets: '4x10-12', weight: '逐步加重', tip: '肩胛骨收紧，下落至胸肌有拉伸感，推起时肘微屈不锁死' },
+        { name: '上斜哑铃卧推', sets: '3x12', weight: '中等重量', tip: '凳角30-45度，专注上胸发力，哑铃下放至胸两侧' },
+        { name: '坐姿夹胸机', sets: '3x15', weight: '适中', tip: '保持手肘微弯，顶峰收缩1-2秒，感受胸缝挤压' },
+        { name: '绳索下压（三头）', sets: '4x12-15', weight: '中等', tip: '上臂贴近身体不动，手腕锁定，完全伸展' },
+        { name: '哑铃颈后臂屈伸', sets: '3x12', weight: '轻-中', tip: '单臂交替，肘尖朝天，慢放快收' }
+      ],
+      cooldown: '胸肌拉伸 + 三头拉伸各30秒 × 2组'
+    },
+    { // 背+二头
+      title: '背部 + 二头肌训练',
+      warmup: '跑步机快走5分钟 + 肩部绕环 + 猫牛式',
+      exercises: [
+        { name: '高位下拉（宽握）', sets: '4x10-12', weight: '渐进加重', tip: '挺胸沉肩，下拉至锁骨，顶峰收缩1-2秒' },
+        { name: '坐姿划船（窄握）', sets: '4x12', weight: '中等', tip: '身体不前倾，拉至腹部，夹紧背部，慢放' },
+        { name: '直臂下压', sets: '3x15', weight: '轻-中', tip: '手臂微弯，感受背阔肌发力，控制慢放' },
+        { name: '哑铃弯举（二头）', sets: '4x10-12', weight: '中等', tip: '肘部固定，避免借力摆动，顶峰收缩' },
+        { name: '锤式弯举', sets: '3x12', weight: '中等', tip: '掌心相对握法，侧重肱肌和肱桡肌' }
+      ],
+      cooldown: '背部拉伸 + 二头拉伸各30秒 × 2组'
+    },
+    { // 休息日
+      title: '休息日',
+      warmup: '',
+      exercises: [],
+      cooldown: '建议：泡沫轴放松全身 + 拉伸 + 散步30分钟促进恢复'
+    },
+    { // 腿+肩
+      title: '腿部 + 肩部训练',
+      warmup: '跑步机快走5分钟 + 髋关节绕环 + 腿摆动',
+      exercises: [
+        { name: '倒蹬机（腿举）', sets: '4x12-15', weight: '渐进加重', tip: '全脚掌踩稳，膝盖不内扣，下放至90度' },
+        { name: '腿弯举（股二头）', sets: '3x12-15', weight: '中等', tip: '控制离心，感受大腿后侧发力' },
+        { name: '坐姿腿屈伸', sets: '3x15', weight: '中等', tip: '脚尖微向外，顶峰收缩股四头肌' },
+        { name: '哑铃推举（肩）', sets: '4x10-12', weight: '中等', tip: '核心收紧不后仰，肘略向前，推至头顶' },
+        { name: '侧平举', sets: '4x15', weight: '轻', tip: '肘微弯，不超过肩高，控制下放不要甩' },
+        { name: '面拉（后束）', sets: '3x15', weight: '轻', tip: '拉向面部，手肘外展，改善圆肩驼背' }
+      ],
+      cooldown: '股四头肌 + 腘绳肌 + 肩部拉伸各30秒 × 2组'
+    },
+    { // 核心+有氧
+      title: '核心训练 + 爬坡有氧',
+      warmup: '动态拉伸5分钟（高抬腿、开合跳、踢臀跑）',
+      exercises: [
+        { name: '平板支撑', sets: '3组，每组力竭', weight: '自重', tip: '身体呈直线，收紧腹部臀部，不塌腰不撅臀' },
+        { name: '卷腹', sets: '3x20', weight: '自重', tip: '下巴离胸一拳距离，腰部贴地，慢速控制' },
+        { name: '俄罗斯转体', sets: '3x20(每侧)', weight: '自重', tip: '双脚离地，核心收紧控制旋转，可用小哑铃加重' },
+        { name: '悬垂举腿（或仰卧举腿）', sets: '3x15', weight: '自重', tip: '控制摆动，感受下腹发力' },
+        { name: '爬坡有氧（跑步机）', sets: '35分钟', weight: '坡度8-10 速度5-6km/h', tip: '保持心率120-140，不扶扶手，自然摆臂' }
+      ],
+      cooldown: '全身拉伸5分钟，重点拉伸腹部和髋屈肌'
+    },
+    { // 全身循环
+      title: '全身循环训练',
+      warmup: '跳绳3分钟 + 动态拉伸全身',
+      exercises: [
+        { name: '哑铃深蹲 + 推举', sets: '4x12', weight: '中等', tip: '蹲至大腿平行，起身后顺势推举，全程核心收紧' },
+        { name: '哑铃划船 + 弯举', sets: '3x12(每侧)', weight: '中等', tip: '单臂支撑凳面，背部发力后接二头弯举' },
+        { name: '俯卧撑', sets: '3x力竭', weight: '自重', tip: '身体成直线，核心收紧，慢下快上' },
+        { name: '哑铃弓步走', sets: '3x12(每侧)', weight: '轻-中', tip: '步幅适中，后膝接近地面但不触碰，身体保持直立' },
+        { name: '爬坡有氧（跑步机）', sets: '25分钟', weight: '坡度8-10 速度5-6km/h', tip: '循环训练后做有氧，燃脂效果更佳' }
+      ],
+      cooldown: '全身泡沫轴放松5分钟'
+    },
+    { // 休息日
+      title: '休息日',
+      warmup: '',
+      exercises: [],
+      cooldown: '建议：瑜伽/拉伸30分钟 + 散步 + 充分睡眠帮助肌肉恢复'
+    }
+  ];
+
+  for (var d = 0; d < 21; d++) {
+    var date = new Date(today);
+    date.setDate(date.getDate() + d);
+    var dateStr = formatDate(date);
+    var dayOfWeek = date.getDay(); // 0=周日 1=周一 ... 6=周六
+    // 周一=索引1 -> schedule索引0, 周日=索引0 -> schedule索引6
+    var scheduleIdx = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+    var schedule = weeklySchedule[scheduleIdx];
+    var detail = weeklyDetail[scheduleIdx];
+
+    var planItem = {
+      dateStr: dateStr,
+      dayIndex: d + 1,
+      dayOfWeek: dayOfWeek,
+      dayName: ['日', '一', '二', '三', '四', '五', '六'][dayOfWeek],
+      type: schedule.type,
+      icon: schedule.icon,
+      color: schedule.color,
+      isRest: schedule.isRest,
+      title: detail.title,
+      warmup: detail.warmup,
+      exercises: detail.exercises,
+      cooldown: detail.cooldown
+    };
+    fitnessPlan.push(planItem);
+    fitnessDayMap[dateStr] = d;
+  }
+}
+
+function formatDate(d) {
+  var y = d.getFullYear();
+  var m = String(d.getMonth() + 1).padStart(2, '0');
+  var dd = String(d.getDate()).padStart(2, '0');
+  return y + '-' + m + '-' + dd;
+}
+
+function updateFitnessDateRange() {
+  var el = document.getElementById('fitnessDateRange');
+  if (!el || fitnessPlan.length === 0) return;
+  el.textContent = fitnessPlan[0].dateStr + ' ~ ' + fitnessPlan[20].dateStr;
+}
+
+function renderFitnessCalendar() {
+  var grid = document.getElementById('fitnessCalendarGrid');
+  if (!grid) return;
+  grid.innerHTML = '';
+
+  // 表头
+  var headers = ['日', '一', '二', '三', '四', '五', '六'];
+  for (var i = 0; i < headers.length; i++) {
+    var h = document.createElement('div');
+    h.className = 'fitness-cal-day-header';
+    h.textContent = headers[i];
+    grid.appendChild(h);
+  }
+
+  // 确定第一天是周几
+  var firstDate = new Date(fitnessPlan[0].dateStr);
+  var firstDayOfWeek = firstDate.getDay(); // 0=周日
+
+  // 填充空白格
+  for (var i = 0; i < firstDayOfWeek; i++) {
+    var empty = document.createElement('div');
+    empty.className = 'fitness-cal-day fitness-cal-empty';
+    grid.appendChild(empty);
+  }
+
+  // 填充21天
+  for (var d = 0; d < 21; d++) {
+    var plan = fitnessPlan[d];
+    var cell = document.createElement('div');
+    cell.className = 'fitness-cal-day';
+    cell.style.borderLeftColor = plan.color;
+    cell.style.borderLeftWidth = '3px';
+    cell.style.borderLeftStyle = 'solid';
+
+    if (plan.isRest) {
+      cell.classList.add('fitness-cal-rest');
+    }
+
+    var dateLabel = document.createElement('div');
+    dateLabel.className = 'fitness-cal-date';
+    dateLabel.textContent = (plan.dayOfWeek === 0 || plan.dayOfWeek === 6) ? plan.dateStr.slice(5) : (d + 1);
+    cell.appendChild(dateLabel);
+
+    var iconEl = document.createElement('div');
+    iconEl.className = 'fitness-cal-icon';
+    iconEl.textContent = plan.icon;
+    cell.appendChild(iconEl);
+
+    var typeEl = document.createElement('div');
+    typeEl.className = 'fitness-cal-type';
+    typeEl.textContent = plan.type;
+    cell.appendChild(typeEl);
+
+    cell.onclick = (function(idx) {
+      return function() { showFitnessDetail(idx); };
+    })(d);
+
+    grid.appendChild(cell);
+  }
+}
+
+function showFitnessDetail(idx) {
+  var plan = fitnessPlan[idx];
+  var content = '';
+
+  content += '<div style="margin-bottom:20px;display:flex;align-items:center;gap:12px;">';
+  content += '<span style="font-size:36px;">' + plan.icon + '</span>';
+  content += '<div>';
+  content += '<h3 style="margin:0;color:' + plan.color + '">' + plan.title + '</h3>';
+  content += '<span style="font-size:14px;color:var(--text-muted)">Day ' + plan.dayIndex + ' · ' + plan.dateStr + ' 周' + plan.dayName + '</span>';
+  content += '</div></div>';
+
+  if (plan.isRest) {
+    content += '<div style="background:rgba(76,175,80,0.08);border:1px solid rgba(76,175,80,0.2);border-radius:12px;padding:20px;text-align:center;">';
+    content += '<div style="font-size:48px;margin-bottom:12px;">😴</div>';
+    content += '<p style="font-size:16px;color:var(--success);margin-bottom:8px;">休息日是训练的一部分</p>';
+    content += '<p style="font-size:14px;color:var(--text-secondary);">' + (plan.cooldown || '充分休息，为下一次训练蓄力') + '</p>';
+    content += '</div>';
+  } else {
+    if (plan.warmup) {
+      content += '<div style="margin-bottom:16px;padding:12px 16px;background:rgba(255,152,0,0.08);border:1px solid rgba(255,152,0,0.2);border-radius:10px;">';
+      content += '<div style="font-size:14px;font-weight:600;color:var(--warning);margin-bottom:4px;">🔥 热身</div>';
+      content += '<div style="font-size:14px;color:var(--text-secondary);">' + plan.warmup + '</div>';
+      content += '</div>';
+    }
+
+    content += '<div style="margin-bottom:16px;">';
+    content += '<div style="font-size:14px;font-weight:600;color:var(--accent);margin-bottom:10px;">📋 训练动作</div>';
+    for (var i = 0; i < plan.exercises.length; i++) {
+      var ex = plan.exercises[i];
+      content += '<div style="background:var(--bg-input);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:8px;">';
+      content += '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">';
+      content += '<span style="font-weight:600;font-size:15px;">' + (i + 1) + '. ' + ex.name + '</span>';
+      content += '<span style="font-size:13px;color:' + plan.color + ';background:' + plan.color + '15;padding:3px 10px;border-radius:10px;">' + ex.sets + '</span>';
+      content += '</div>';
+      if (ex.weight) {
+        content += '<div style="font-size:13px;color:var(--text-muted);margin-top:4px;">重量: ' + ex.weight + '</div>';
+      }
+      content += '<div style="font-size:13px;color:var(--text-secondary);margin-top:4px;line-height:1.6;">💡 ' + ex.tip + '</div>';
+      content += '</div>';
+    }
+    content += '</div>';
+
+    if (plan.cooldown) {
+      content += '<div style="padding:12px 16px;background:rgba(77,208,225,0.08);border:1px solid rgba(77,208,225,0.2);border-radius:10px;">';
+      content += '<div style="font-size:14px;font-weight:600;color:#4dd0e1;margin-bottom:4px;">🧊 放松拉伸</div>';
+      content += '<div style="font-size:14px;color:var(--text-secondary);">' + plan.cooldown + '</div>';
+      content += '</div>';
+    }
+  }
+
+  showModal(content, '训练详情');
+}
+
+// ==================== 饮食建议 ====================
+var mealPlans = {
+  breakfast: {
+    name: '早餐 (7:30-8:30)',
+    icon: '🌅',
+    foods: [
+      { name: '燕麦', amount: '50g（干重）', note: '加250ml热水或脱脂牛奶泡软' },
+      { name: '鸡蛋', amount: '2个（全蛋）', note: '水煮或微量油煎，撒少许黑胡椒' },
+      { name: '蓝莓/草莓', amount: '80g', note: '搭配燕麦食用，补充抗氧化剂' }
+    ],
+    tip: '做法：燕麦加水/奶煮3分钟，鸡蛋水煮6分钟，水果洗净即可。总约420大卡。',
+    totalCal: '~420大卡',
+    macros: '蛋白质28g · 碳水50g · 脂肪14g',
+    alternatives: [
+      { name: '全麦面包', amount: '2片', note: '替代燕麦，配花生酱' },
+      { name: '蛋白粉', amount: '1勺(30g)', note: '替代1个鸡蛋，与水/牛奶混合' },
+      { name: '香蕉', amount: '1根', note: '替代浆果，补充钾和快碳' }
+    ]
+  },
+  lunch: {
+    name: '午餐 (12:00-13:00)',
+    icon: '☀️',
+    foods: [
+      { name: '鸡胸肉', amount: '150g（生重）', note: '加盐、黑胡椒、少许酱油腌制后煎/烤' },
+      { name: '糙米饭', amount: '100g（熟重约半碗）', note: '可提前煮好分装冷冻' },
+      { name: '西兰花', amount: '200g', note: '水煮或清炒，加少许蒜末' },
+      { name: '橄榄油', amount: '5g', note: '拌蔬菜或煎鸡胸时使用' }
+    ],
+    tip: '做法：鸡胸肉两面煎至金黄（每面4分钟），西兰花焯水2分钟，糙米饭微波加热。总约520大卡。',
+    totalCal: '~520大卡',
+    macros: '蛋白质45g · 碳水48g · 脂肪16g',
+    alternatives: [
+      { name: '三文鱼', amount: '150g', note: '替代鸡胸肉，补充Omega-3' },
+      { name: '红薯', amount: '150g', note: '替代糙米饭，低GI慢碳' },
+      { name: '芦笋/菠菜', amount: '200g', note: '替代西兰花，换口味' }
+    ]
+  },
+  preWorkout: {
+    name: '练前加餐 (训练前1-1.5小时)',
+    icon: '⏰',
+    foods: [
+      { name: '全麦吐司', amount: '1片', note: '提供训练所需快碳' },
+      { name: '香蕉', amount: '半根', note: '补充钾，防抽筋' },
+      { name: '黑咖啡', amount: '1杯（无糖）', note: '提升训练专注度和代谢率' }
+    ],
+    tip: '训练前不要吃太饱，以碳水为主快速供能。总约180大卡。',
+    totalCal: '~180大卡',
+    macros: '蛋白质3g · 碳水38g · 脂肪2g',
+    alternatives: [
+      { name: '能量棒', amount: '半根', note: '替代吐司+香蕉，便携' },
+      { name: '葡萄干', amount: '20g', note: '替代香蕉，快速补充糖原' },
+      { name: '绿茶', amount: '1杯', note: '替代黑咖啡，温和提神' }
+    ]
+  },
+  dinner: {
+    name: '练后晚餐 (训练后1小时内)',
+    icon: '🌙',
+    foods: [
+      { name: '瘦牛肉/鱼肉', amount: '120g', note: '补充训练后所需蛋白质，煎或蒸' },
+      { name: '混合蔬菜沙拉', amount: '250g', note: '生菜+番茄+黄瓜+彩椒，加少量油醋汁' },
+      { name: '红薯/玉米', amount: '100g', note: '补充糖原，修复肌肉' },
+      { name: '脱脂酸奶', amount: '100ml', note: '餐后补充益生菌和酪蛋白' }
+    ],
+    tip: '做法：牛肉煎至七分熟（每面3分钟），蔬菜洗净切块，红薯蒸或烤20分钟。总约530大卡。',
+    totalCal: '~530大卡',
+    macros: '蛋白质42g · 碳水45g · 脂肪18g',
+    alternatives: [
+      { name: '豆腐', amount: '200g', note: '替代牛肉，植物蛋白' },
+      { name: '藜麦', amount: '80g', note: '替代红薯，完全蛋白谷物' },
+      { name: '希腊酸奶', amount: '150g', note: '替代脱脂酸奶，更高蛋白' }
+    ]
+  }
+};
+
+function getCurrentMeal() {
+  var h = new Date().getHours();
+  if (h >= 5 && h < 10) return 'breakfast';
+  if (h >= 10 && h < 15) return 'lunch';
+  if (h >= 15 && h < 17.5) return 'preWorkout';
+  return 'dinner';
+}
+
+function renderMealPlan() {
+  var timeline = document.getElementById('fitnessMealTimeline');
+  var summary = document.getElementById('fitnessMealSummary');
+  var dateEl = document.getElementById('fitnessMealDate');
+  if (!timeline || !summary) return;
+
+  var now = new Date();
+  dateEl.textContent = formatDate(now);
+
+  var currentMeal = getCurrentMeal();
+  var mealKeys = ['breakfast', 'lunch', 'preWorkout', 'dinner'];
+  var totalCal = 0;
+  var totalP = 0, totalC = 0, totalF = 0;
+
+  // 渲染时间线
+  var html = '';
+  for (var i = 0; i < mealKeys.length; i++) {
+    var key = mealKeys[i];
+    var meal = mealPlans[key];
+    var isActive = key === currentMeal;
+
+    html += '<div class="fitness-meal-item' + (isActive ? ' fitness-meal-active' : '') + '">';
+    html += '<div class="fitness-meal-time">';
+    html += '<span class="fitness-meal-dot" style="background:' + (isActive ? 'var(--accent)' : 'var(--border)') + '"></span>';
+    html += '<div>';
+    html += '<div class="fitness-meal-label">' + meal.icon + ' ' + meal.name + (isActive ? ' ⬅️ 当前' : '') + '</div>';
+    html += '<div class="fitness-meal-cal">' + meal.totalCal + '</div>';
+    html += '</div></div>';
+
+    // 食物列表
+    html += '<div class="fitness-meal-foods">';
+    for (var j = 0; j < meal.foods.length; j++) {
+      var f = meal.foods[j];
+      html += '<div class="fitness-meal-food-item">';
+      html += '<span class="fitness-meal-food-name">' + f.name + '</span>';
+      html += '<span class="fitness-meal-food-amount">' + f.amount + '</span>';
+      html += '<span class="fitness-meal-food-note">' + f.note + '</span>';
+      html += '</div>';
+    }
+
+    // 做法提示
+    html += '<div class="fitness-meal-tip">👨‍🍳 ' + meal.tip + '</div>';
+    html += '<div class="fitness-meal-macros">📊 ' + meal.macros + '</div>';
+
+    // 可替换食材折叠
+    html += '<details class="fitness-meal-alt"><summary>🔄 可替换食材（点击展开）</summary>';
+    for (var k = 0; k < meal.alternatives.length; k++) {
+      var alt = meal.alternatives[k];
+      html += '<div class="fitness-meal-alt-item"><span>' + alt.name + '</span><span>' + alt.amount + '</span><span style="font-size:12px;color:var(--text-muted)">' + alt.note + '</span></div>';
+    }
+    html += '</details>';
+
+    html += '</div>';
+    html += '</div>';
+
+    // 累加营养数据
+    var calMatch = meal.totalCal.match(/(\d+)/);
+    if (calMatch) totalCal += parseInt(calMatch[1]);
+    var macroMatch = meal.macros.match(/蛋白质(\d+)g.*碳水(\d+)g.*脂肪(\d+)g/);
+    if (macroMatch) {
+      totalP += parseInt(macroMatch[1]);
+      totalC += parseInt(macroMatch[2]);
+      totalF += parseInt(macroMatch[3]);
+    }
+  }
+
+  timeline.innerHTML = html;
+
+  // 渲染总览
+  summary.innerHTML = '<div class="fitness-meal-total">📊 全天总计：约 <strong>' + totalCal + '大卡</strong>（目标1850大卡）</div>' +
+    '<div class="fitness-meal-macros" style="margin-top:8px;">蛋白质' + totalP + 'g · 碳水' + totalC + 'g · 脂肪' + totalF + 'g</div>';
+}
+
+// ==================== 激励语 ====================
+var fitnessMottos = [
+  '💪 每一滴汗水，都是未来的你在感谢现在的你',
+  '🔥 没有白流的汗，没有白费的努力',
+  '🏆 今天不想练，明天更不想练——所以今天就去练',
+  '⚡ 比你优秀的人比你还努力，你有什么资格不奋斗',
+  '🎯 把目标刻在心里，把行动落在脚下',
+  '🌟 21天可以养成一个习惯，今天是第几天？',
+  '🦁 肌肉不会自己长出来，脂肪不会自己消失',
+  '🏃 爬坡虽累，但山顶的风景值得',
+  '💎 你不是在减肥，你是在雕刻一个更好的自己',
+  '🚀 所有的惊艳，都来自长久的坚持',
+  '🌊 每次训练都是对自己的投资，复利效应惊人',
+  '⛰️ 最难的不是动作，是走进健身房的第一步',
+  '🦅 要么练，要么不练，没有"试试看"',
+  '🎖️ 自律给我自由',
+  '🔋 训练是最好的充电方式',
+  '👊 今天流的汗，是昨天吃的债',
+  '🏋️ 重量不会说谎，你付出了多少它就回馈多少',
+  '🌈 坚持不一定成功，但放弃一定很轻松——选前者',
+  '🧬 每一次训练都在改变你的基因表达',
+  '💯 满分不是目标，比昨天进步1%才是'
+];
+
+var lastMottoIdx = -1;
+
+function renderFitnessMotto() {
+  var el = document.getElementById('fitnessMottoText');
+  if (!el) return;
+  var idx;
+  do {
+    idx = Math.floor(Math.random() * fitnessMottos.length);
+  } while (idx === lastMottoIdx && fitnessMottos.length > 1);
+  lastMottoIdx = idx;
+  el.textContent = fitnessMottos[idx];
+}
+
+function refreshFitnessMotto() {
+  renderFitnessMotto();
+  var mottoCard = document.getElementById('fitnessMotto');
+  if (mottoCard) {
+    mottoCard.style.transform = 'scale(1.02)';
+    setTimeout(function() { mottoCard.style.transform = ''; }, 200);
   }
 }
 
