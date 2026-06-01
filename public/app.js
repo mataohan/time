@@ -6,7 +6,7 @@
 (function() {
   var errEl = document.getElementById('jsLoadError');
   if (errEl) errEl.style.display = 'none';
-  console.log('[APP] app.js 加载成功 ✅ 版本: v2.9');
+  console.log('[APP] app.js 加载成功 ✅ 版本: v3.0');
 })();
 
 // ==================== API 通信层 ====================
@@ -36,18 +36,36 @@ const API = {
     console.log('[API] token 已' + (t ? '设置' : '清除') + (t ? ' (长度=' + t.length + ', 前10字符=' + t.substring(0, 10) + '...)' : ''));
   },
 
-  async _fetch(url, options = {}) {
-    // 🔧 关键修复：每次请求时实时从 localStorage 读取最新 token，防止 this.token 未同步
-    var currentToken = this.token;
-    // 如果内存中的 token 为空，尝试从 localStorage 恢复（处理页面刷新后 token 丢失的情况）
-    if (!currentToken) {
-      var storedToken = localStorage.getItem('tm_token');
-      if (storedToken) {
-        console.warn('[API] ⚠️ 内存中 token 为空，但从 localStorage 恢复 (长度=' + storedToken.length + ')');
-        this.token = storedToken;
-        currentToken = storedToken;
-      }
+  /**
+   * 获取当前有效的 token
+   * 🔧 核心修复：不再依赖 this.token 内存变量，改为每次实时从 localStorage 读取
+   * 这样无论什么原因导致内存 token 丢失，都能保证每次请求都带上最新 token
+   */
+  _getToken() {
+    // 直接从 localStorage 读取，这是唯一可靠的数据源
+    var storedToken = localStorage.getItem('tm_token');
+    if (storedToken) {
+      // 同步更新内存中的缓存（用于其他地方读取 API.token）
+      this.token = storedToken;
+      return storedToken;
     }
+    // 兜底：尝试从 user 对象中恢复（兼容旧版数据）
+    var userData = null;
+    try { userData = JSON.parse(localStorage.getItem('tm_user')); } catch(e) {}
+    if (userData && userData.token) {
+      // 迁移旧版 token 到新键名
+      localStorage.setItem('tm_token', userData.token);
+      this.token = userData.token;
+      console.warn('[API] ⚠️ 从 tm_user 迁移 token 到 tm_token');
+      return userData.token;
+    }
+    this.token = '';
+    return '';
+  },
+
+  async _fetch(url, options = {}) {
+    // 🔧 关键修复：每次请求都实时从 localStorage 读取 token，不再依赖内存缓存
+    var currentToken = this._getToken();
 
     const headers = { 'Content-Type': 'application/json', ...options.headers };
     if (currentToken) {
@@ -313,13 +331,12 @@ document.getElementById('authForm').addEventListener('submit', async function (e
       } else {
         result = await API.register({ email: email, password: password, nickname: nickname });
       }
-      // 🔧 修复：登录成功后同时保存 token 到 localStorage 和内存
-      console.log('[AUTH] 登录成功，保存 token: 长度=' + result.token.length + ', 前12字符=' + result.token.substring(0, 12) + '...');
+      // 🔧 关键修复：登录成功后，先写入 localStorage，再更新内存
+      // 因为 _getToken() 现在实时从 localStorage 读取，必须确保 localStorage 先有值
+      localStorage.setItem('tm_token', result.token);
       API.setToken(result.token);
       user = result.user;
       localStorage.setItem('tm_user', JSON.stringify(user));
-      // 确保 token 也被单独存储（setToken 已做，此处是双重保障）
-      localStorage.setItem('tm_token', result.token);
       toast(result.message || '登录成功');
       showApp();
       return; // 成功，直接返回
@@ -2185,8 +2202,10 @@ document.addEventListener('keydown', function (e) {
 // ==================== Token 诊断工具（开发调试用） ====================
 async function debugToken() {
   try {
+    // 🔧 使用 _getToken() 实时读取，确保拿到最新的 token
+    var currentToken = API._getToken();
     var result = await fetch(API_BASE + '/api/auth/debug', {
-      headers: API.token ? { 'Authorization': 'Bearer ' + API.token } : {}
+      headers: currentToken ? { 'Authorization': 'Bearer ' + currentToken } : {}
     });
     var info = await result.json();
     console.log('[TOKEN-DEBUG] Token 状态:', JSON.stringify(info, null, 2));
