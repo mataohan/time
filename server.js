@@ -8,7 +8,6 @@ const db = require('./db');
 const app = express();
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'time_master_secret_2025';
-const JWT_EXPIRES_IN = '30d'; // 延长到30天，避免频繁过期
 const SALT_ROUNDS = 10;
 const IS_PRODUCTION = process.env.NODE_ENV === 'production';
 
@@ -163,7 +162,7 @@ function authMiddleware(req, res, next) {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     console.log(`[AUTH] 拒绝: 未携带令牌 (${req.method} ${req.path})`);
-    return res.status(401).json({ error: '未授权访问，请先登录', code: 'UNAUTHORIZED' });
+    return res.status(401).json({ error: '未授权访问，请先登录', code: 'NO_TOKEN' });
   }
   try {
     const token = authHeader.split(' ')[1];
@@ -253,7 +252,7 @@ app.post('/api/register', async (req, res) => {
       [email, hashedPassword, nickname || email.split('@')[0]]
     );
 
-    const token = jwt.sign({ userId: user.id, email }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+    const token = jwt.sign({ userId: user.id, email }, JWT_SECRET, { expiresIn: '30d' });
     const elapsed = Date.now() - startTime;
     console.log(`[REGISTER] 注册成功: userId=${user.id}, email=${email} (${elapsed}ms)`);
     res.json({
@@ -303,7 +302,7 @@ app.post('/api/login', async (req, res) => {
       return res.status(400).json({ success: false, error: '邮箱或密码错误' });
     }
 
-    const token = jwt.sign({ userId: user.id, email: user.email }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+    const token = jwt.sign({ userId: user.id, email: user.email }, JWT_SECRET, { expiresIn: '30d' });
     const elapsed = Date.now() - startTime;
     console.log(`[LOGIN] 登录成功: userId=${user.id}, email=${email} (${elapsed}ms)`);
     res.json({
@@ -415,6 +414,7 @@ app.get('/api/tasks', authMiddleware, async (req, res) => {
     sql += ' AND status = ?';
     params.push(status);
   } else if (completed !== undefined) {
+    // 旧版兼容：completed=1 → status='completed'，completed=0 → status='pending'
     sql += ' AND status = ?';
     params.push(parseInt(completed) === 1 ? 'completed' : 'pending');
   }
@@ -500,6 +500,7 @@ app.patch('/api/tasks/:id/toggle', authMiddleware, async (req, res) => {
   const task = await db.get('SELECT * FROM tasks WHERE id = ? AND user_id = ?', [req.params.id, req.userId]);
   if (!task) return res.status(404).json({ error: '事项不存在' });
 
+  // toggle 仅在 pending 和 completed 之间切换；unfinished 则恢复为 pending
   const curStatus = task.status || (task.completed ? 'completed' : 'pending');
   let newStatus, newCompleted;
   if (curStatus === 'pending') {
@@ -525,80 +526,46 @@ app.patch('/api/tasks/:id/toggle', authMiddleware, async (req, res) => {
 
 // ========== 记账路由 ==========
 
-// 获取消费记录
+// 获取消费记录（使用 YEAR/MONTH 函数精确筛选，避免字符串拼接日期边界问题）
 app.get('/api/expenses', authMiddleware, async (req, res) => {
-  const { year, month, start_date, end_date } = req.query;
-  console.log('[EXPENSES GET] 请求参数:', { year, month, start_date, end_date, userId: req.userId });
+  const { year, month } = req.query;
   let sql = 'SELECT * FROM expenses WHERE user_id = ?';
   const params = [req.userId];
 
-  if (start_date && end_date) {
-    sql += ' AND expense_date >= ? AND expense_date <= ?';
-    params.push(start_date, end_date);
-  } else if (year && month) {
-    // 计算该月的最后一天，避免写死31导致越界
-    var y = parseInt(year, 10);
-    var m = parseInt(month, 10);
-    // JS: new Date(y, m, 0).getDate() 正确获取每月最后一天
-    // 例: new Date(2026, 6, 0) → 2026年6月0日 → 6月最后一天 = 30 ✅
-    var lastDay = new Date(y, m, 0).getDate();
-    var startDate = y + '-' + String(m).padStart(2, '0') + '-01';
-    var endDate = y + '-' + String(m).padStart(2, '0') + '-' + String(lastDay).padStart(2, '0');
-    console.log('[EXPENSES GET] 日期范围:', startDate, '~', endDate, '(该月共' + lastDay + '天)');
-    sql += ' AND expense_date >= ? AND expense_date <= ?';
-    params.push(startDate, endDate);
+  if (year && month) {
+    // 使用 YEAR() 和 MONTH() 函数，精准匹配，不受日期边界影响
+    sql += ' AND YEAR(expense_date) = ? AND MONTH(expense_date) = ?';
+    params.push(parseInt(year), parseInt(month));
   } else if (year) {
-    sql += ' AND expense_date >= ? AND expense_date <= ?';
-    params.push(`${year}-01-01`, `${year}-12-31`);
+    sql += ' AND YEAR(expense_date) = ?';
+    params.push(parseInt(year));
   }
 
   sql += ' ORDER BY expense_date DESC, created_at DESC';
-  console.log('[EXPENSES GET] SQL:', sql, '| params:', JSON.stringify(params));
   const expenses = await db.all(sql, params);
-  console.log('[EXPENSES GET] 查询结果: ' + expenses.length + ' 条记录');
   res.json({ expenses });
 });
 
 // 创建消费记录
 app.post('/api/expenses', authMiddleware, async (req, res) => {
   const { amount, category, note, expense_date } = req.body;
-  console.log('[EXPENSES POST] 收到请求:', { amount, category, note, expense_date, userId: req.userId });
   if (!amount || !category || !expense_date) {
-    console.log('[EXPENSES POST] 拒绝: 缺少必填字段');
     return res.status(400).json({ error: '金额、分类和日期不能为空' });
   }
   const amt = parseFloat(amount);
-  if (isNaN(amt) || amt <= 0) {
-    console.log('[EXPENSES POST] 拒绝: 金额无效 -', amount);
-    return res.status(400).json({ error: '金额必须为正数' });
-  }
+  if (isNaN(amt) || amt <= 0) return res.status(400).json({ error: '金额必须为正数' });
   if (!['餐饮', '购物', '交通', '娱乐', '医疗', '其他'].includes(category)) {
-    console.log('[EXPENSES POST] 拒绝: 无效分类 -', category);
     return res.status(400).json({ error: '无效的分类' });
   }
 
-  // 验证并规范化日期格式为 YYYY-MM-DD
-  var normalizedDate = expense_date;
-  if (typeof expense_date === 'string') {
-    // 如果包含时间部分，截取日期部分
-    var dateMatch = expense_date.match(/^(\d{4}-\d{2}-\d{2})/);
-    if (dateMatch) {
-      normalizedDate = dateMatch[1];
-    }
-  }
-  // 确保日期有效
-  var testDate = new Date(normalizedDate + 'T00:00:00');
-  if (isNaN(testDate.getTime())) {
-    console.log('[EXPENSES POST] 拒绝: 日期格式无效 -', expense_date);
-    return res.status(400).json({ error: '日期格式无效，请使用 YYYY-MM-DD 格式' });
-  }
-  console.log('[EXPENSES POST] 规范化日期:', expense_date, '→', normalizedDate);
+  // 确保 expense_date 为 YYYY-MM-DD 格式（截断时区信息，避免日期偏移）
+  const safeDate = String(expense_date).substring(0, 10);
 
   const expense = await db.insert(
     'INSERT INTO expenses (user_id, amount, category, note, expense_date) VALUES (?, ?, ?, ?, ?)',
-    [req.userId, amt, category, note || '', normalizedDate]
+    [req.userId, amt, category, note || '', safeDate]
   );
-  console.log('[EXPENSES POST] 记账成功: id=' + expense.id + ', date=' + normalizedDate + ', amount=' + amt);
+  console.log(`[EXPENSE] 创建成功: id=${expense.id}, amount=${amt}, date=${safeDate}`);
   res.json({ message: '记账成功', expense });
 });
 
@@ -607,24 +574,17 @@ app.put('/api/expenses/:id', authMiddleware, async (req, res) => {
   const expense = await db.get('SELECT * FROM expenses WHERE id = ? AND user_id = ?', [req.params.id, req.userId]);
   if (!expense) return res.status(404).json({ error: '消费记录不存在' });
   const { amount, category, note, expense_date } = req.body;
-  console.log('[EXPENSES PUT] 收到更新请求: id=' + req.params.id, { amount, category, note, expense_date });
   const amt = amount !== undefined ? parseFloat(amount) : expense.amount;
   if (amount !== undefined && (isNaN(amt) || amt <= 0)) return res.status(400).json({ error: '金额必须为正数' });
 
-  // 规范化日期
-  var normalizedDate = expense_date || expense.expense_date;
-  if (typeof normalizedDate === 'string') {
-    var dateMatch = normalizedDate.match(/^(\d{4}-\d{2}-\d{2})/);
-    if (dateMatch) normalizedDate = dateMatch[1];
-  }
-  console.log('[EXPENSES PUT] 规范化日期:', expense_date, '→', normalizedDate);
+  // 确保日期为 YYYY-MM-DD 格式
+  const safeDate = expense_date ? String(expense_date).substring(0, 10) : expense.expense_date;
 
   await db.run(
     'UPDATE expenses SET amount=?, category=?, note=?, expense_date=?, updated_at=CURRENT_TIMESTAMP WHERE id=? AND user_id=?',
-    [amt, category || expense.category, note !== undefined ? note : expense.note, normalizedDate, req.params.id, req.userId]
+    [amt, category || expense.category, note !== undefined ? note : expense.note, safeDate, req.params.id, req.userId]
   );
   const updated = await db.get('SELECT * FROM expenses WHERE id = ?', [req.params.id]);
-  console.log('[EXPENSES PUT] 更新成功: id=' + req.params.id + ', date=' + normalizedDate);
   res.json({ message: '更新成功', expense: updated });
 });
 
@@ -632,61 +592,44 @@ app.put('/api/expenses/:id', authMiddleware, async (req, res) => {
 app.delete('/api/expenses/:id', authMiddleware, async (req, res) => {
   const changes = await db.change('DELETE FROM expenses WHERE id = ? AND user_id = ?', [req.params.id, req.userId]);
   if (changes === 0) return res.status(404).json({ error: '消费记录不存在' });
-  console.log('[EXPENSES DELETE] 删除成功: id=' + req.params.id);
   res.json({ message: '删除成功' });
 });
 
-// 获取记账统计（年度总额 + 月度总额 + 当月分类汇总）
+// 记账统计：返回年总额、月总额、分类汇总
 app.get('/api/expenses/stats', authMiddleware, async (req, res) => {
   const { year, month } = req.query;
-  console.log('[EXPENSES STATS] 请求参数:', { year, month, userId: req.userId });
+  const y = parseInt(year);
+  const m = parseInt(month);
 
-  if (!year) {
-    return res.status(400).json({ error: '请提供 year 参数' });
+  if (!y || !m) {
+    return res.status(400).json({ error: 'year 和 month 参数必填' });
   }
 
-  var y = parseInt(year, 10);
-  var m = month ? parseInt(month, 10) : null;
-
-  // 年度总消费
-  var yearResult = await db.get(
-    'SELECT COALESCE(SUM(amount), 0) as total FROM expenses WHERE user_id = ? AND expense_date >= ? AND expense_date <= ?',
-    [req.userId, y + '-01-01', y + '-12-31']
+  // 年总额
+  const yearRow = await db.get(
+    'SELECT COALESCE(SUM(amount), 0) AS total FROM expenses WHERE user_id = ? AND YEAR(expense_date) = ?',
+    [req.userId, y]
   );
-  var yearTotal = Number(yearResult.total);
+  // 月总额
+  const monthRow = await db.get(
+    'SELECT COALESCE(SUM(amount), 0) AS total FROM expenses WHERE user_id = ? AND YEAR(expense_date) = ? AND MONTH(expense_date) = ?',
+    [req.userId, y, m]
+  );
+  // 分类汇总
+  const catRows = await db.all(
+    'SELECT category, COALESCE(SUM(amount), 0) AS total FROM expenses WHERE user_id = ? AND YEAR(expense_date) = ? AND MONTH(expense_date) = ? GROUP BY category',
+    [req.userId, y, m]
+  );
 
-  // 月度总消费
-  var monthTotal = 0;
-  var catBreakdown = [];
-  if (m) {
-    var lastDay = new Date(y, m, 0).getDate();
-    var startDate = y + '-' + String(m).padStart(2, '0') + '-01';
-    var endDate = y + '-' + String(m).padStart(2, '0') + '-' + String(lastDay).padStart(2, '0');
-
-    var monthResult = await db.get(
-      'SELECT COALESCE(SUM(amount), 0) as total FROM expenses WHERE user_id = ? AND expense_date >= ? AND expense_date <= ?',
-      [req.userId, startDate, endDate]
-    );
-    monthTotal = Number(monthResult.total);
-
-    // 当月各分类汇总
-    var catResults = await db.all(
-      'SELECT category, COALESCE(SUM(amount), 0) as total FROM expenses WHERE user_id = ? AND expense_date >= ? AND expense_date <= ? GROUP BY category ORDER BY total DESC',
-      [req.userId, startDate, endDate]
-    );
-    for (var i = 0; i < catResults.length; i++) {
-      catBreakdown.push({
-        category: catResults[i].category,
-        total: Number(catResults[i].total)
-      });
-    }
+  const categories = {};
+  for (const row of catRows) {
+    categories[row.category] = row.total;
   }
 
-  console.log('[EXPENSES STATS] 结果: 年度=' + yearTotal + ', 月度=' + monthTotal + ', 分类=' + catBreakdown.length + '项');
   res.json({
-    yearTotal: yearTotal,
-    monthTotal: monthTotal,
-    categoryBreakdown: catBreakdown
+    yearTotal: yearRow.total,
+    monthTotal: monthRow.total,
+    categories
   });
 });
 
@@ -698,6 +641,7 @@ app.get('/api/pets', authMiddleware, async (req, res) => {
     'SELECT * FROM pets WHERE user_id = ? ORDER BY created_at DESC',
     [req.userId]
   );
+  // 为每只宠物附带最近3条健康事件
   for (const pet of pets) {
     pet.recent_events = await db.all(
       'SELECT * FROM pet_health_events WHERE pet_id = ? ORDER BY event_date DESC LIMIT 3',
@@ -860,14 +804,13 @@ app.use((err, req, res, next) => {
 
 // ========== 启动 ==========
 console.log('========================================');
-console.log('   ⏰ 时间管理大师 v2.7');
+console.log('   ⏰ 时间管理大师 v2.0');
 console.log('========================================');
 console.log(`   环境: ${IS_PRODUCTION ? '生产 (Production)' : '开发 (Development)'}`);
 console.log(`   端口: ${PORT}`);
 console.log(`   数据库类型: TiDB Cloud (MySQL)`);
 console.log(`   DATABASE_URL 已配置: ${process.env.DATABASE_URL ? '✅ 是' : '❌ 否'}`);
 console.log(`   JWT_SECRET 已配置: ${process.env.JWT_SECRET ? '✅ 是 (自定义)' : '⚠️ 否 (使用默认值)'}`);
-console.log(`   JWT 过期时间: ${JWT_EXPIRES_IN}`);
 console.log(`   CORS: ${IS_PRODUCTION ? (process.env.CORS_ORIGIN || '允许所有来源') : '允许所有来源 (开发模式)'}`);
 console.log('========================================');
 

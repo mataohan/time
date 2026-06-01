@@ -1,10 +1,12 @@
 'use strict';
 
 // ==================== 加载检测 ====================
+// 如果 JS 文件被错误返回为 HTML 或其他非 JS 内容，此行会报 SyntaxError
+// 正常加载时，隐藏加载错误提示
 (function() {
   var errEl = document.getElementById('jsLoadError');
   if (errEl) errEl.style.display = 'none';
-  console.log('[APP] app.js 加载成功 ✅ 版本: v2.7');
+  console.log('[APP] app.js 加载成功 ✅ 版本: v2.5');
 })();
 
 // ==================== API 通信层 ====================
@@ -24,7 +26,7 @@ const API = {
     const controller = new AbortController();
     const timeoutId = setTimeout(function () { controller.abort(); }, timeoutMs);
     var fetchOptions = { ...options, headers, signal: controller.signal };
-    delete fetchOptions.timeout;
+    delete fetchOptions.timeout; // 移除自定义字段
 
     var res;
     try {
@@ -40,12 +42,18 @@ const API = {
     }
     clearTimeout(timeoutId);
 
-    // ====== 401 响应拦截：自动登出 ======
+    var data;
+    try {
+      data = await res.json();
+    } catch (jsonErr) {
+      console.error('[API] JSON 解析失败:', url, res.status, jsonErr.message);
+      throw new Error('服务器返回了无效的响应 (' + res.status + ')');
+    }
+    // 401 自动登出
     if (res.status === 401) {
       console.warn('[API] 收到 401 未授权，自动登出');
       API.setToken('');
       localStorage.removeItem('tm_user');
-      // 避免重复跳转
       if (document.getElementById('appPage').style.display !== 'none') {
         document.getElementById('authPage').style.display = 'flex';
         document.getElementById('appPage').style.display = 'none';
@@ -54,13 +62,6 @@ const API = {
       throw new Error('登录已过期，请重新登录');
     }
 
-    var data;
-    try {
-      data = await res.json();
-    } catch (jsonErr) {
-      console.error('[API] JSON 解析失败:', url, res.status, jsonErr.message);
-      throw new Error('服务器返回了无效的响应 (' + res.status + ')');
-    }
     if (!res.ok) throw new Error(data.error || '请求失败 (' + res.status + ')');
     return data;
   },
@@ -99,10 +100,10 @@ const API = {
 
   // ---- 记账 ----
   getExpenses: (params) => API.get('/api/expenses?' + new URLSearchParams(params).toString()),
-  getExpenseStats: (params) => API.get('/api/expenses/stats?' + new URLSearchParams(params).toString()),
   createExpense: (b) => API.post('/api/expenses', b),
   updateExpense: (id, b) => API.put('/api/expenses/' + id, b),
   deleteExpense: (id) => API.del('/api/expenses/' + id),
+  getExpenseStats: (year, month) => API.get('/api/expenses/stats?year=' + year + '&month=' + month),
 
   // ---- 宠物档案 ----
   getPets: () => API.get('/api/pets'),
@@ -170,14 +171,18 @@ function toast(msg, type) {
 function esc(s) { var d = document.createElement('div'); d.textContent = (s || ''); return d.innerHTML; }
 function today() { var d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
 
+// 将服务器时间转为本地 Date 对象（服务器存 UTC, 序列化为 ISO 字符串或 Date 对象）
 function toLocalDate(dt) {
   if (!dt) return null;
   if (dt instanceof Date) return dt;
   var s = String(dt).trim();
+  // ISO 8601 或带时区格式, new Date() 可直接解析
   if (s.indexOf('T') !== -1 || s.indexOf('Z') !== -1) return new Date(s);
+  // 纯 "YYYY-MM-DD HH:MM:SS" 无时区 → 假定为 UTC
   return new Date(s.replace(' ', 'T') + 'Z');
 }
 
+// 格式化为本地时间 HH:MM
 function fmtTimeShort(dt) {
   var d = toLocalDate(dt);
   if (d && !isNaN(d.getTime())) {
@@ -234,9 +239,11 @@ document.getElementById('authForm').addEventListener('submit', async function (e
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { errEl.textContent = '邮箱格式不正确'; errEl.style.display = 'block'; return; }
   if (password.length < 6) { errEl.textContent = '密码至少6位'; errEl.style.display = 'block'; return; }
 
+  // 显示加载状态
   submitBtn.disabled = true;
   submitBtn.textContent = '请稍候...';
 
+  // 先快速检查服务器健康状态（2s 超时）
   var serverOk = false;
   try {
     var health = await API._fetch('/api/health', { timeout: 3000 });
@@ -256,6 +263,7 @@ document.getElementById('authForm').addEventListener('submit', async function (e
     return;
   }
 
+  // 重试逻辑：最多尝试 2 次
   var lastError = null;
   for (var attempt = 1; attempt <= 2; attempt++) {
     try {
@@ -270,17 +278,19 @@ document.getElementById('authForm').addEventListener('submit', async function (e
       localStorage.setItem('tm_user', JSON.stringify(user));
       toast(result.message || '登录成功');
       showApp();
-      return;
+      return; // 成功，直接返回
     } catch (err) {
       lastError = err;
       console.error('[AUTH] 第' + attempt + '次尝试失败:', err.message);
       if (attempt < 2) {
+        // 等待 1 秒后重试
         submitBtn.textContent = '重试中... (' + attempt + '/2)';
         await new Promise(function (r) { setTimeout(r, 1000); });
       }
     }
   }
 
+  // 所有尝试都失败了
   var msg = (lastError && lastError.message) || '请求失败';
   if (msg === 'Failed to fetch' || msg.indexOf('NetworkError') !== -1 || msg.indexOf('fetch') !== -1) {
     msg = '无法连接到服务器，请检查网络或服务器状态';
@@ -315,6 +325,7 @@ function showApp() {
   selectedDate = today();
   startClock();
   switchTab('calendar');
+  // 后台预加载待办事项，初始化角标数字
   loadTasks();
 }
 
@@ -472,6 +483,7 @@ function openDiaryModal(id) {
     moodOpts += '<option value="' + m + '" ' + (diary && diary.mood === m ? 'selected' : '') + '>' + MOODS[m] + ' ' + m + '</option>';
   }
 
+  // 检查草稿（仅新建手账时）
   var draftBanner = '';
   if (!isEdit) {
     var draft = loadDraft(DRAFT_KEYS.diary);
@@ -497,6 +509,7 @@ function openDiaryModal(id) {
     '</div></div>';
   document.getElementById('modalOverlay').style.display = 'flex';
 
+  // 仅新建时启动自动保存
   if (!isEdit) startDraftAutoSave(DRAFT_KEYS.diary);
 
   setTimeout(function () {
@@ -527,6 +540,7 @@ async function saveDiary(id) {
     stopDraftAutoSave();
     modalDirty = false;
     closeModal();
+    // 清除分类筛选，确保新创建/编辑的手账一定能显示
     diaryFilter = null;
     var btns = document.querySelectorAll('.journal-filter-btn');
     for (var i = 0; i < btns.length; i++) btns[i].classList.remove('active');
@@ -540,6 +554,7 @@ async function deleteDiary(id) {
   try {
     await API.deleteDiary(id);
     toast('手账已删除');
+    // 清除筛选后重新加载，否则删除后日记可能仍在缓存中不更新
     diaryFilter = null;
     var btns = document.querySelectorAll('.journal-filter-btn');
     for (var i = 0; i < btns.length; i++) btns[i].classList.remove('active');
@@ -555,6 +570,8 @@ function closeModal() {
   document.getElementById('modalOverlay').style.display = 'none';
 }
 
+// ==================== 同步加载日记 ====================
+// 将 MySQL2 返回的 Date 对象统一转为 YYYY-MM-DD 字符串，避免 === 比较失败
 function normalizeDate(d) {
   if (!d) return '';
   if (typeof d === 'object' && d instanceof Date) {
@@ -563,6 +580,7 @@ function normalizeDate(d) {
     var day = String(d.getDate()).padStart(2, '0');
     return y + '-' + m + '-' + day;
   }
+  // 截取日期部分 "YYYY-MM-DD"
   if (typeof d === 'string') return d.substring(0, 10);
   return String(d);
 }
@@ -571,6 +589,7 @@ async function loadDiaries() {
   try {
     var result = await API.getDiaries(currentYear, currentMonth, diaryFilter);
     diariesCache = result.diaries || [];
+    // 标准化所有日记的日期字段
     for (var i = 0; i < diariesCache.length; i++) {
       diariesCache[i].diary_date = normalizeDate(diariesCache[i].diary_date);
     }
@@ -667,6 +686,7 @@ async function loadTasks() {
     tasksCache = result.tasks || [];
     renderTaskList(tasksCache);
 
+    // 始终拉取全量任务用于计算角标数量，避免切换选项卡后角标归零
     var allResult = await API.getTasks({});
     updateTaskCounts(allResult.tasks || []);
   } catch (err) { toast('加载任务失败: ' + err.message, 'error'); }
@@ -778,6 +798,7 @@ function renderTaskList(tasks) {
     var cls = 'task-item' + (isDone ? ' completed' : '') + (isUnfinished ? ' task-unfinished' : '') + ' ' + (priCls[t.priority] || '');
     html += '<div class="' + cls + '">';
 
+    // 左侧圆圈
     if (isUnfinished) {
       html += '<div class="task-checkbox task-unfinish-dot" onclick="restoreTask(\'' + t.id + '\')" title="恢复为待办">↩</div>';
     } else if (isDone) {
@@ -790,6 +811,7 @@ function renderTaskList(tasks) {
     html += '<div class="task-title">' + esc(t.title) + '</div>';
     if (t.content) html += '<div class="task-content">' + esc(t.content) + '</div>';
 
+    // 未完成：显示原因和时间
     if (isUnfinished && t.unfinished_reason) {
       html += '<div class="task-unfinished-reason">💬 ' + esc(t.unfinished_reason) + '</div>';
       if (t.unfinished_at) html += '<div class="task-unfinished-time">🕐 标记时间: ' + fmtTime(t.unfinished_at) + '</div>';
@@ -807,6 +829,7 @@ function renderTaskList(tasks) {
     }
     html += '</div></div>';
 
+    // 已完成事项：显示完成说明
     if (isDone) {
       var note = t.completion_note || '';
       html += '<div class="completion-note-area" id="cnArea-' + t.id + '">';
@@ -825,10 +848,13 @@ function renderTaskList(tasks) {
       html += '</div>';
     }
 
+    // 右侧按钮
     html += '<div class="task-actions">';
+    // 待办项显示"未完成"按钮
     if (!isDone && !isUnfinished) {
       html += '<button class="btn-task-unfinish" onclick="openUnfinishedModal(\'' + t.id + '\')" title="标记为未完成">❌</button>';
     }
+    // 未完成项显示"恢复"按钮
     if (isUnfinished) {
       html += '<button class="btn-task-restore" onclick="restoreTask(\'' + t.id + '\')" title="恢复为待办">🔄</button>';
     }
@@ -848,6 +874,7 @@ function updateTaskCounts(allTasks) {
   el = document.getElementById('tcPending'); if (el) el.textContent = pending.length;
   el = document.getElementById('tcCompleted'); if (el) el.textContent = completed.length;
   el = document.getElementById('tcUnfinished'); if (el) el.textContent = unfinished.length;
+  // 分类计数（仅 pending）
   for (var i = 0; i < CATS.length; i++) {
     var c = CATS[i];
     el = document.getElementById(CAT_TC_ID[c]);
@@ -856,6 +883,7 @@ function updateTaskCounts(allTasks) {
   el = document.getElementById('pendingBadge'); if (el) el.textContent = pending.length;
 }
 
+// ==================== 任务筛选 ====================
 function filterTasksByStatus(status) {
   taskStatusFilter = status;
   taskCatFilter = null;
@@ -863,6 +891,7 @@ function filterTasksByStatus(status) {
   var sidxs = { pending: 0, completed: 1, unfinished: 2 };
   for (var i = 0; i < sbtns.length; i++) sbtns[i].classList.remove('active');
   if (sbtns[sidxs[status]]) sbtns[sidxs[status]].classList.add('active');
+  // 重置分类筛选
   var cbtns = document.querySelectorAll('.task-subcat-btn');
   for (var i = 0; i < cbtns.length; i++) cbtns[i].classList.remove('active');
   if (cbtns[0]) cbtns[0].classList.add('active');
@@ -880,7 +909,9 @@ function filterTasksByCat(cat) {
   loadTasks();
 }
 
+// ==================== 任务操作 ====================
 async function toggleTask(id) {
+  // 确认对话框
   var task = tasksCache.find(function (t) { return t.id == id; });
   var isCompleted = task && (task.status === 'completed' || task.completed);
   if (!isCompleted && !confirm('确定完成此事项吗？')) return;
@@ -946,6 +977,7 @@ function openTaskModal(id) {
     '<option value="2" ' + (task && task.priority === 2 ? 'selected' : '') + '>🔴 高</option>'
   ].join('');
 
+  // 已完成任务可编辑完成时间
   var completedAtHtml = '';
   if (isEdit && (task.status === 'completed' || task.completed)) {
     var catVal = '';
@@ -955,6 +987,7 @@ function openTaskModal(id) {
     completedAtHtml = '<div class="form-group form-group-full"><label>✅ 完成时间（可编辑）</label><input type="datetime-local" id="tCompletedAt" value="' + esc(catVal) + '" oninput="modalDirty=true"></div>';
   }
 
+  // 检查草稿（仅新增任务时）
   var draftBanner = '';
   if (!isEdit) {
     var draft = loadDraft(DRAFT_KEYS.task);
@@ -979,6 +1012,7 @@ function openTaskModal(id) {
     '</div></div>';
   document.getElementById('modalOverlay').style.display = 'flex';
 
+  // 仅新建时启动自动保存
   if (!isEdit) startDraftAutoSave(DRAFT_KEYS.task);
 
   setTimeout(function () {
@@ -996,6 +1030,7 @@ async function saveTask(id) {
   if (!title) { toast('请输入标题', 'error'); return; }
 
   var body = { category: cat, title: title, content: content, priority: priority, due_date: dueDate };
+  // 已完成任务可修改完成时间
   var catEl = document.getElementById('tCompletedAt');
   if (catEl) {
     body.completed_at = catEl.value || null;
@@ -1026,6 +1061,7 @@ async function deleteTask(id) {
   } catch (err) { toast(err.message, 'error'); }
 }
 
+// ==================== 完成说明 ====================
 function editCompletionNote(id) {
   var textEl = document.getElementById('cnText-' + id);
   var editWrap = document.getElementById('cnEditWrap-' + id);
@@ -1033,6 +1069,7 @@ function editCompletionNote(id) {
   if (textEl) textEl.style.display = 'none';
   if (editWrap) editWrap.style.display = 'flex';
   if (btnEl) btnEl.style.display = 'none';
+  // 隐藏所有编辑按钮（如果之前有）
   var area = document.getElementById('cnArea-' + id);
   if (area) {
     var btns = area.querySelectorAll('.completion-note-btn');
@@ -1048,6 +1085,7 @@ async function saveCompletionNote(id) {
   var note = input.value.trim();
   try {
     await API.updateTask(id, { completion_note: note || null });
+    // 刷新当前列表
     await loadTasks();
     toast(note ? '完成说明已保存' : '完成说明已清空');
   } catch (err) { toast(err.message, 'error'); }
@@ -1090,16 +1128,14 @@ function changeExpMonth() {
 
 async function loadExpenses() {
   try {
-    console.log('[EXP FRONT] loadExpenses: year=' + expYear + ' month=' + expMonth);
-    var result = await API.getExpenses({ year: expYear, month: expMonth });
-    console.log('[EXP FRONT] 收到 ' + (result.expenses ? result.expenses.length : 0) + ' 条记录');
+    // 确保 year/month 是整数类型，URLSearchParams 会正确序列化
+    var result = await API.getExpenses({ year: parseInt(expYear), month: parseInt(expMonth) });
     expensesCache = (result.expenses || []).map(function (e) {
       e.expense_date = normalizeDate(e.expense_date);
       return e;
     });
     renderExpCalendar();
-    // 从后端获取真实统计数据
-    await loadExpStats();
+    updateExpStats();
     if (expSelectedDate) {
       var parts = expSelectedDate.split('-');
       if (parseInt(parts[0]) === expYear && parseInt(parts[1]) === expMonth) {
@@ -1110,39 +1146,6 @@ async function loadExpenses() {
       }
     }
   } catch (err) { toast('加载记账失败: ' + err.message, 'error'); }
-}
-
-async function loadExpStats() {
-  try {
-    console.log('[EXP FRONT] loadExpStats: year=' + expYear + ' month=' + expMonth);
-    var stats = await API.getExpenseStats({ year: expYear, month: expMonth });
-    console.log('[EXP FRONT] 统计数据: 年度=' + stats.yearTotal + ' 月度=' + stats.monthTotal);
-    var el;
-    el = document.getElementById('expYearLabel'); if (el) el.textContent = expYear;
-    el = document.getElementById('expMonthLabel'); if (el) el.textContent = expMonth;
-    el = document.getElementById('expYearTotal'); if (el) el.textContent = '¥ ' + Number(stats.yearTotal || 0).toFixed(2);
-    el = document.getElementById('expMonthTotal'); if (el) el.textContent = '¥ ' + Number(stats.monthTotal || 0).toFixed(2);
-  } catch (err) {
-    console.error('[EXP FRONT] 加载统计失败:', err.message);
-    fallbackExpStats();
-  }
-}
-
-function fallbackExpStats() {
-  var yearTotal = 0;
-  var monthTotal = 0;
-  var monthPrefix = expYear + '-' + String(expMonth).padStart(2, '0') + '-';
-  for (var i = 0; i < expensesCache.length; i++) {
-    var e = expensesCache[i];
-    if (e.expense_date && e.expense_date.startsWith(String(expYear))) yearTotal += Number(e.amount);
-    if (e.expense_date && e.expense_date.startsWith(monthPrefix)) monthTotal += Number(e.amount);
-  }
-  var el;
-  el = document.getElementById('expYearLabel'); if (el) el.textContent = expYear;
-  el = document.getElementById('expMonthLabel'); if (el) el.textContent = expMonth;
-  el = document.getElementById('expYearTotal'); if (el) el.textContent = '¥ ' + yearTotal.toFixed(2);
-  el = document.getElementById('expMonthTotal'); if (el) el.textContent = '¥ ' + monthTotal.toFixed(2);
-  console.log('[EXP FRONT] fallbackExpStats: 年度=' + yearTotal + ' 月度=' + monthTotal);
 }
 
 function renderExpCalendar() {
@@ -1300,18 +1303,13 @@ function openExpenseModal(id) {
 async function saveExpense(id) {
   var amount = parseFloat(document.getElementById('eAmount').value);
   var cat = document.getElementById('eCat').value;
-  var dateRaw = document.getElementById('eDate').value;
+  var dateInput = document.getElementById('eDate').value;
   var note = document.getElementById('eNote').value.trim();
   if (isNaN(amount) || amount <= 0) { toast('请输入有效金额', 'error'); return; }
-  if (!dateRaw) { toast('请选择日期', 'error'); return; }
+  if (!dateInput) { toast('请选择日期', 'error'); return; }
 
-  // 确保日期是 YYYY-MM-DD 格式，避免时区偏移
-  var date = dateRaw;
-  var dateMatch = dateRaw.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (dateMatch) {
-    date = dateMatch[1] + '-' + dateMatch[2] + '-' + dateMatch[3];
-  }
-  console.log('[EXP FRONT] saveExpense: date=' + date + ' amount=' + amount + ' cat=' + cat + ' id=' + (id || 'new'));
+  // 确保日期为 YYYY-MM-DD 格式（input[type=date] 本身返回此格式，但做安全截取防止时区问题）
+  var date = String(dateInput).substring(0, 10);
 
   try {
     if (id) {
@@ -1323,6 +1321,7 @@ async function saveExpense(id) {
     }
     modalDirty = false;
     closeModal();
+    // 根据返回日期决定是否切换月份
     var dParts = date.split('-');
     if (parseInt(dParts[0]) !== expYear || parseInt(dParts[1]) !== expMonth) {
       expYear = parseInt(dParts[0]);
@@ -1330,10 +1329,12 @@ async function saveExpense(id) {
       populateExpMonthPicker();
     }
     await loadExpenses();
+    // 选中保存的日期
     expSelectedDate = date;
     var list = expensesCache.filter(function (e) { return e.expense_date === date; });
     renderExpList(date, list);
     renderExpCalendar();
+    updateExpStats();
   } catch (err) { toast(err.message, 'error'); }
 }
 
@@ -1344,31 +1345,6 @@ async function deleteExpense(id) {
     toast('消费记录已删除');
     await loadExpenses();
   } catch (err) { toast(err.message, 'error'); }
-}
-
-function updateExpStats() {
-  loadExpStats();
-}
-
-function expPrevMonth() {
-  if (expMonth === 1) { expMonth = 12; expYear--; }
-  else expMonth--;
-  populateExpMonthPicker();
-  loadExpenses();
-}
-function expNextMonth() {
-  if (expMonth === 12) { expMonth = 1; expYear++; }
-  else expMonth++;
-  populateExpMonthPicker();
-  loadExpenses();
-}
-async function expGoToToday() {
-  var now = new Date();
-  expYear = now.getFullYear();
-  expMonth = now.getMonth() + 1;
-  expSelectedDate = today();
-  populateExpMonthPicker();
-  await loadExpenses();
 }
 
 // ==================== 宠物档案 ====================
@@ -1407,6 +1383,7 @@ function renderPetsList() {
     var age = calcAge(p.birth_date);
     var photo = p.photo_url || '';
     html += '<div class="pet-card">';
+    // 照片区
     html += '<div class="pet-photo">';
     if (photo) {
       html += '<img src="' + esc(photo) + '" alt="' + esc(p.name) + '" onerror="handlePetPhotoError(this)" loading="lazy">';
@@ -1414,6 +1391,7 @@ function renderPetsList() {
       html += '<div class="pet-photo-placeholder">🐱</div>';
     }
     html += '</div>';
+    // 信息区
     html += '<div class="pet-info">';
     html += '<div class="pet-name-row"><span class="pet-name">' + esc(p.name) + '</span>';
     if (p.breed) html += '<span class="pet-breed">' + esc(p.breed) + '</span>';
@@ -1422,11 +1400,13 @@ function renderPetsList() {
     if (p.birth_date) html += '<span class="pet-meta-item">🎂 ' + p.birth_date + (age ? ' (' + age + ')' : '') + '</span>';
     html += '<span class="pet-meta-item">🐾 ' + (p.species === 'cat' ? '猫咪' : p.species) + '</span>';
     html += '</div>';
+    // 操作按钮
     html += '<div class="pet-card-actions">';
     html += '<button class="pet-action-btn" onclick="openHealthEventModal(\'' + p.id + '\')" title="添加健康事件">➕ 健康事件</button>';
     html += '<button class="pet-action-btn" onclick="openPetModal(\'' + p.id + '\')" title="编辑档案">✏️ 编辑档案</button>';
     html += '<button class="pet-action-btn pet-action-del" onclick="deletePet(\'' + p.id + '\')" title="删除">🗑️</button>';
     html += '</div>';
+    // 最近健康事件摘要
     if (p.recent_events && p.recent_events.length > 0) {
       html += '<div class="pet-health-preview">';
       html += '<div class="pet-health-title">📋 最近健康记录</div>';
@@ -1447,6 +1427,7 @@ function renderPetsList() {
   grid.innerHTML = html;
 }
 
+// ---- 宠物弹窗 ----
 function openPetModal(id) {
   var pet = id ? petsCache.find(function (p) { return p.id == id; }) : null;
   var isEdit = !!pet;
@@ -1503,6 +1484,7 @@ async function deletePet(id) {
   } catch (err) { toast(err.message, 'error'); }
 }
 
+// ---- 健康事件弹窗 ----
 function openHealthEventModal(petId, eventId) {
   var ev = null;
   if (eventId && petEventCache[petId]) {
@@ -1558,6 +1540,7 @@ async function saveHealthEvent(petId, eventId) {
   } catch (err) { toast(err.message, 'error'); }
 }
 
+// ---- 查看全部健康事件（时间线弹窗） ----
 async function viewAllHealthEvents(petId) {
   var pet = petsCache.find(function (p) { return p.id == petId; });
   if (!pet) return;
@@ -1610,24 +1593,79 @@ async function deleteHealthEvent(petId, eventId) {
   } catch (err) { toast(err.message, 'error'); }
 }
 
+// 从后端 stats API 获取年/月总额，回退到客户端计算
+async function loadExpStats() {
+  try {
+    var stats = await API.getExpenseStats(expYear, expMonth);
+    // 确保是数字
+    var yt = Number(stats.yearTotal) || 0;
+    var mt = Number(stats.monthTotal) || 0;
+    var el;
+    el = document.getElementById('expYearLabel'); if (el) el.textContent = expYear;
+    el = document.getElementById('expMonthLabel'); if (el) el.textContent = expMonth;
+    el = document.getElementById('expYearTotal'); if (el) el.textContent = '¥ ' + yt.toFixed(2);
+    el = document.getElementById('expMonthTotal'); if (el) el.textContent = '¥ ' + mt.toFixed(2);
+  } catch (err) {
+    console.warn('[EXP] stats API 失败，使用客户端计算:', err.message);
+    fallbackExpStats();
+  }
+}
+
+// 客户端兜底统计（当 stats API 不可用时）
+function fallbackExpStats() {
+  var yearTotal = 0;
+  var monthTotal = 0;
+  var monthPrefix = expYear + '-' + String(expMonth).padStart(2, '0') + '-';
+  for (var i = 0; i < expensesCache.length; i++) {
+    var e = expensesCache[i];
+    if (e.expense_date && e.expense_date.startsWith(String(expYear))) yearTotal += Number(e.amount);
+    if (e.expense_date && e.expense_date.startsWith(monthPrefix)) monthTotal += Number(e.amount);
+  }
+  var el;
+  el = document.getElementById('expYearLabel'); if (el) el.textContent = expYear;
+  el = document.getElementById('expMonthLabel'); if (el) el.textContent = expMonth;
+  el = document.getElementById('expYearTotal'); if (el) el.textContent = '¥ ' + yearTotal.toFixed(2);
+  el = document.getElementById('expMonthTotal'); if (el) el.textContent = '¥ ' + monthTotal.toFixed(2);
+}
+
+function updateExpStats() {
+  loadExpStats();
+}
+
+function expPrevMonth() {
+  if (expMonth === 1) { expMonth = 12; expYear--; }
+  else expMonth--;
+  populateExpMonthPicker();
+  loadExpenses();
+}
+function expNextMonth() {
+  if (expMonth === 12) { expMonth = 1; expYear++; }
+  else expMonth++;
+  populateExpMonthPicker();
+  loadExpenses();
+}
+async function expGoToToday() {
+  var now = new Date();
+  expYear = now.getFullYear();
+  expMonth = now.getMonth() + 1;
+  expSelectedDate = today();
+  populateExpMonthPicker();
+  await loadExpenses();
+}
+
+// ==================== 宠物照片加载失败处理 ====================
 function handlePetPhotoError(img) {
   if (img && img.parentElement) {
     img.parentElement.innerHTML = '<div class="pet-photo-placeholder">🐱</div>';
   }
 }
 
-function showModal(content, title) {
-  stopDraftAutoSave();
-  modalDirty = false;
-  var html = '<h3>' + esc(title || '详情') + '</h3><div>' + content + '</div><div class="modal-actions"><button class="btn-cancel" onclick="closeModal()">关闭</button></div>';
-  document.getElementById('modalContent').innerHTML = html;
-  document.getElementById('modalOverlay').style.display = 'flex';
-}
-
 // ==================== 健身计划 ====================
 var fitnessInitialized = false;
+
+// 训练计划配置：21天（3周），每周5练+2休息
 var fitnessPlan = [];
-var fitnessDayMap = {};
+var fitnessDayMap = {}; // dateStr -> plan index
 
 function initFitness() {
   if (!fitnessInitialized) {
@@ -1641,10 +1679,11 @@ function initFitness() {
 }
 
 function buildFitnessPlan() {
-  var todayDate = new Date();
+  var today = new Date();
   fitnessPlan = [];
   fitnessDayMap = {};
 
+  // 每周训练安排：周一胸+三头、周二背+二头、周三休息、周四腿+肩、周五核心+有氧、周六全身循环、周日休息
   var weeklySchedule = [
     { type: '胸+三头', icon: '💪', color: '#4fc3f7', isRest: false },
     { type: '背+二头', icon: '🔙', color: '#ba68c8', isRest: false },
@@ -1655,8 +1694,9 @@ function buildFitnessPlan() {
     { type: '休息日', icon: '😴', color: '#5a6480', isRest: true }
   ];
 
+  // 每周训练详细内容
   var weeklyDetail = [
-    {
+    { // 胸+三头
       title: '胸肌 + 三头肌训练',
       warmup: '跑步机快走5分钟 + 肩关节绕环 + 胸部拉伸',
       exercises: [
@@ -1668,7 +1708,7 @@ function buildFitnessPlan() {
       ],
       cooldown: '胸肌拉伸 + 三头拉伸各30秒 × 2组'
     },
-    {
+    { // 背+二头
       title: '背部 + 二头肌训练',
       warmup: '跑步机快走5分钟 + 肩部绕环 + 猫牛式',
       exercises: [
@@ -1680,11 +1720,13 @@ function buildFitnessPlan() {
       ],
       cooldown: '背部拉伸 + 二头拉伸各30秒 × 2组'
     },
-    {
-      title: '休息日', warmup: '', exercises: [],
+    { // 休息日
+      title: '休息日',
+      warmup: '',
+      exercises: [],
       cooldown: '建议：泡沫轴放松全身 + 拉伸 + 散步30分钟促进恢复'
     },
-    {
+    { // 腿+肩
       title: '腿部 + 肩部训练',
       warmup: '跑步机快走5分钟 + 髋关节绕环 + 腿摆动',
       exercises: [
@@ -1697,7 +1739,7 @@ function buildFitnessPlan() {
       ],
       cooldown: '股四头肌 + 腘绳肌 + 肩部拉伸各30秒 × 2组'
     },
-    {
+    { // 核心+有氧
       title: '核心训练 + 爬坡有氧',
       warmup: '动态拉伸5分钟（高抬腿、开合跳、踢臀跑）',
       exercises: [
@@ -1709,7 +1751,7 @@ function buildFitnessPlan() {
       ],
       cooldown: '全身拉伸5分钟，重点拉伸腹部和髋屈肌'
     },
-    {
+    { // 全身循环
       title: '全身循环训练',
       warmup: '跳绳3分钟 + 动态拉伸全身',
       exercises: [
@@ -1721,17 +1763,20 @@ function buildFitnessPlan() {
       ],
       cooldown: '全身泡沫轴放松5分钟'
     },
-    {
-      title: '休息日', warmup: '', exercises: [],
+    { // 休息日
+      title: '休息日',
+      warmup: '',
+      exercises: [],
       cooldown: '建议：瑜伽/拉伸30分钟 + 散步 + 充分睡眠帮助肌肉恢复'
     }
   ];
 
   for (var d = 0; d < 21; d++) {
-    var date = new Date(todayDate);
+    var date = new Date(today);
     date.setDate(date.getDate() + d);
     var dateStr = formatDate(date);
-    var dayOfWeek = date.getDay();
+    var dayOfWeek = date.getDay(); // 0=周日 1=周一 ... 6=周六
+    // 周一=索引1 -> schedule索引0, 周日=索引0 -> schedule索引6
     var scheduleIdx = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
     var schedule = weeklySchedule[scheduleIdx];
     var detail = weeklyDetail[scheduleIdx];
@@ -1773,6 +1818,7 @@ function renderFitnessCalendar() {
   if (!grid) return;
   grid.innerHTML = '';
 
+  // 表头
   var headers = ['日', '一', '二', '三', '四', '五', '六'];
   for (var i = 0; i < headers.length; i++) {
     var h = document.createElement('div');
@@ -1781,15 +1827,18 @@ function renderFitnessCalendar() {
     grid.appendChild(h);
   }
 
+  // 确定第一天是周几
   var firstDate = new Date(fitnessPlan[0].dateStr);
-  var firstDayOfWeek = firstDate.getDay();
+  var firstDayOfWeek = firstDate.getDay(); // 0=周日
 
+  // 填充空白格
   for (var i = 0; i < firstDayOfWeek; i++) {
     var empty = document.createElement('div');
     empty.className = 'fitness-cal-day fitness-cal-empty';
     grid.appendChild(empty);
   }
 
+  // 填充21天
   for (var d = 0; d < 21; d++) {
     var plan = fitnessPlan[d];
     var cell = document.createElement('div');
@@ -1804,52 +1853,18 @@ function renderFitnessCalendar() {
 
     var dateLabel = document.createElement('div');
     dateLabel.className = 'fitness-cal-date';
-    dateLabel.textContent = 'Day ' + (d + 1) + ' · ' + plan.dateStr.slice(5);
+    dateLabel.textContent = (plan.dayOfWeek === 0 || plan.dayOfWeek === 6) ? plan.dateStr.slice(5) : (d + 1);
     cell.appendChild(dateLabel);
 
-    var headerRow = document.createElement('div');
-    headerRow.className = 'fitness-cal-header-row';
-    var dayBadge = document.createElement('span');
-    dayBadge.className = 'fitness-cal-day-badge';
-    dayBadge.textContent = '周' + plan.dayName;
-    dayBadge.style.background = plan.color + '20';
-    dayBadge.style.color = plan.color;
-    headerRow.appendChild(dayBadge);
-    var iconEl = document.createElement('span');
+    var iconEl = document.createElement('div');
     iconEl.className = 'fitness-cal-icon';
     iconEl.textContent = plan.icon;
-    headerRow.appendChild(iconEl);
-    cell.appendChild(headerRow);
+    cell.appendChild(iconEl);
 
     var typeEl = document.createElement('div');
     typeEl.className = 'fitness-cal-type';
     typeEl.textContent = plan.type;
     cell.appendChild(typeEl);
-
-    if (!plan.isRest && plan.exercises.length > 0) {
-      var summary = document.createElement('div');
-      summary.className = 'fitness-cal-summary';
-
-      var totalSets = 0;
-      for (var e = 0; e < plan.exercises.length; e++) {
-        var setsMatch = plan.exercises[e].sets.match(/(\d+)/);
-        if (setsMatch) totalSets += parseInt(setsMatch[1]);
-      }
-
-      var summaryHtml = '<span class="fitness-cal-stat">🏋️ ' + plan.exercises.length + '个动作</span>';
-      summaryHtml += '<span class="fitness-cal-stat">📊 ' + totalSets + '组</span>';
-      var estMin = plan.exercises.length * 8 + 15;
-      summaryHtml += '<span class="fitness-cal-stat">⏱ ~' + estMin + 'min</span>';
-      summary.innerHTML = summaryHtml;
-      cell.appendChild(summary);
-    }
-
-    if (plan.isRest) {
-      var restLabel = document.createElement('div');
-      restLabel.className = 'fitness-cal-rest-label';
-      restLabel.textContent = '恢复日';
-      cell.appendChild(restLabel);
-    }
 
     cell.onclick = (function(idx) {
       return function() { showFitnessDetail(idx); };
@@ -1915,14 +1930,16 @@ function showFitnessDetail(idx) {
 // ==================== 饮食建议 ====================
 var mealPlans = {
   breakfast: {
-    name: '早餐 (7:30-8:30)', icon: '🌅',
+    name: '早餐 (7:30-8:30)',
+    icon: '🌅',
     foods: [
       { name: '燕麦', amount: '50g（干重）', note: '加250ml热水或脱脂牛奶泡软' },
       { name: '鸡蛋', amount: '2个（全蛋）', note: '水煮或微量油煎，撒少许黑胡椒' },
       { name: '蓝莓/草莓', amount: '80g', note: '搭配燕麦食用，补充抗氧化剂' }
     ],
     tip: '做法：燕麦加水/奶煮3分钟，鸡蛋水煮6分钟，水果洗净即可。总约420大卡。',
-    totalCal: '~420大卡', macros: '蛋白质28g · 碳水50g · 脂肪14g',
+    totalCal: '~420大卡',
+    macros: '蛋白质28g · 碳水50g · 脂肪14g',
     alternatives: [
       { name: '全麦面包', amount: '2片', note: '替代燕麦，配花生酱' },
       { name: '蛋白粉', amount: '1勺(30g)', note: '替代1个鸡蛋，与水/牛奶混合' },
@@ -1930,7 +1947,8 @@ var mealPlans = {
     ]
   },
   lunch: {
-    name: '午餐 (12:00-13:00)', icon: '☀️',
+    name: '午餐 (12:00-13:00)',
+    icon: '☀️',
     foods: [
       { name: '鸡胸肉', amount: '150g（生重）', note: '加盐、黑胡椒、少许酱油腌制后煎/烤' },
       { name: '糙米饭', amount: '100g（熟重约半碗）', note: '可提前煮好分装冷冻' },
@@ -1938,7 +1956,8 @@ var mealPlans = {
       { name: '橄榄油', amount: '5g', note: '拌蔬菜或煎鸡胸时使用' }
     ],
     tip: '做法：鸡胸肉两面煎至金黄（每面4分钟），西兰花焯水2分钟，糙米饭微波加热。总约520大卡。',
-    totalCal: '~520大卡', macros: '蛋白质45g · 碳水48g · 脂肪16g',
+    totalCal: '~520大卡',
+    macros: '蛋白质45g · 碳水48g · 脂肪16g',
     alternatives: [
       { name: '三文鱼', amount: '150g', note: '替代鸡胸肉，补充Omega-3' },
       { name: '红薯', amount: '150g', note: '替代糙米饭，低GI慢碳' },
@@ -1946,14 +1965,16 @@ var mealPlans = {
     ]
   },
   preWorkout: {
-    name: '练前加餐 (训练前1-1.5小时)', icon: '⏰',
+    name: '练前加餐 (训练前1-1.5小时)',
+    icon: '⏰',
     foods: [
       { name: '全麦吐司', amount: '1片', note: '提供训练所需快碳' },
       { name: '香蕉', amount: '半根', note: '补充钾，防抽筋' },
       { name: '黑咖啡', amount: '1杯（无糖）', note: '提升训练专注度和代谢率' }
     ],
     tip: '训练前不要吃太饱，以碳水为主快速供能。总约180大卡。',
-    totalCal: '~180大卡', macros: '蛋白质3g · 碳水38g · 脂肪2g',
+    totalCal: '~180大卡',
+    macros: '蛋白质3g · 碳水38g · 脂肪2g',
     alternatives: [
       { name: '能量棒', amount: '半根', note: '替代吐司+香蕉，便携' },
       { name: '葡萄干', amount: '20g', note: '替代香蕉，快速补充糖原' },
@@ -1961,7 +1982,8 @@ var mealPlans = {
     ]
   },
   dinner: {
-    name: '练后晚餐 (训练后1小时内)', icon: '🌙',
+    name: '练后晚餐 (训练后1小时内)',
+    icon: '🌙',
     foods: [
       { name: '瘦牛肉/鱼肉', amount: '120g', note: '补充训练后所需蛋白质，煎或蒸' },
       { name: '混合蔬菜沙拉', amount: '250g', note: '生菜+番茄+黄瓜+彩椒，加少量油醋汁' },
@@ -1969,7 +1991,8 @@ var mealPlans = {
       { name: '脱脂酸奶', amount: '100ml', note: '餐后补充益生菌和酪蛋白' }
     ],
     tip: '做法：牛肉煎至七分熟（每面3分钟），蔬菜洗净切块，红薯蒸或烤20分钟。总约530大卡。',
-    totalCal: '~530大卡', macros: '蛋白质42g · 碳水45g · 脂肪18g',
+    totalCal: '~530大卡',
+    macros: '蛋白质42g · 碳水45g · 脂肪18g',
     alternatives: [
       { name: '豆腐', amount: '200g', note: '替代牛肉，植物蛋白' },
       { name: '藜麦', amount: '80g', note: '替代红薯，完全蛋白谷物' },
@@ -1997,8 +2020,10 @@ function renderMealPlan() {
 
   var currentMeal = getCurrentMeal();
   var mealKeys = ['breakfast', 'lunch', 'preWorkout', 'dinner'];
-  var totalCal = 0, totalP = 0, totalC = 0, totalF = 0;
+  var totalCal = 0;
+  var totalP = 0, totalC = 0, totalF = 0;
 
+  // 渲染时间线
   var html = '';
   for (var i = 0; i < mealKeys.length; i++) {
     var key = mealKeys[i];
@@ -2013,6 +2038,7 @@ function renderMealPlan() {
     html += '<div class="fitness-meal-cal">' + meal.totalCal + '</div>';
     html += '</div></div>';
 
+    // 食物列表
     html += '<div class="fitness-meal-foods">';
     for (var j = 0; j < meal.foods.length; j++) {
       var f = meal.foods[j];
@@ -2022,17 +2048,23 @@ function renderMealPlan() {
       html += '<span class="fitness-meal-food-note">' + f.note + '</span>';
       html += '</div>';
     }
+
+    // 做法提示
     html += '<div class="fitness-meal-tip">👨‍🍳 ' + meal.tip + '</div>';
     html += '<div class="fitness-meal-macros">📊 ' + meal.macros + '</div>';
 
+    // 可替换食材折叠
     html += '<details class="fitness-meal-alt"><summary>🔄 可替换食材（点击展开）</summary>';
     for (var k = 0; k < meal.alternatives.length; k++) {
       var alt = meal.alternatives[k];
       html += '<div class="fitness-meal-alt-item"><span>' + alt.name + '</span><span>' + alt.amount + '</span><span style="font-size:12px;color:var(--text-muted)">' + alt.note + '</span></div>';
     }
     html += '</details>';
-    html += '</div></div>';
 
+    html += '</div>';
+    html += '</div>';
+
+    // 累加营养数据
     var calMatch = meal.totalCal.match(/(\d+)/);
     if (calMatch) totalCal += parseInt(calMatch[1]);
     var macroMatch = meal.macros.match(/蛋白质(\d+)g.*碳水(\d+)g.*脂肪(\d+)g/);
@@ -2042,11 +2074,15 @@ function renderMealPlan() {
       totalF += parseInt(macroMatch[3]);
     }
   }
+
   timeline.innerHTML = html;
+
+  // 渲染总览
   summary.innerHTML = '<div class="fitness-meal-total">📊 全天总计：约 <strong>' + totalCal + '大卡</strong>（目标1850大卡）</div>' +
     '<div class="fitness-meal-macros" style="margin-top:8px;">蛋白质' + totalP + 'g · 碳水' + totalC + 'g · 脂肪' + totalF + 'g</div>';
 }
 
+// ==================== 激励语 ====================
 var fitnessMottos = [
   '💪 每一滴汗水，都是未来的你在感谢现在的你',
   '🔥 没有白流的汗，没有白费的努力',
