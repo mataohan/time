@@ -8,6 +8,7 @@ const db = require('./db');
 const app = express();
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'time_master_secret_2025';
+const JWT_EXPIRES_IN = '30d'; // 延长到30天，避免频繁过期
 const SALT_ROUNDS = 10;
 const IS_PRODUCTION = process.env.NODE_ENV === 'production';
 
@@ -162,7 +163,7 @@ function authMiddleware(req, res, next) {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     console.log(`[AUTH] 拒绝: 未携带令牌 (${req.method} ${req.path})`);
-    return res.status(401).json({ error: '未授权访问，请先登录' });
+    return res.status(401).json({ error: '未授权访问，请先登录', code: 'UNAUTHORIZED' });
   }
   try {
     const token = authHeader.split(' ')[1];
@@ -172,7 +173,10 @@ function authMiddleware(req, res, next) {
     next();
   } catch (err) {
     console.log(`[AUTH] 拒绝: 令牌无效 (${req.method} ${req.path}) - ${err.message}`);
-    return res.status(401).json({ error: '登录已过期，请重新登录' });
+    if (err.name === 'TokenExpiredError') {
+      return res.status(401).json({ error: '登录已过期，请重新登录', code: 'TOKEN_EXPIRED' });
+    }
+    return res.status(401).json({ error: '登录已过期，请重新登录', code: 'TOKEN_INVALID' });
   }
 }
 
@@ -249,7 +253,7 @@ app.post('/api/register', async (req, res) => {
       [email, hashedPassword, nickname || email.split('@')[0]]
     );
 
-    const token = jwt.sign({ userId: user.id, email }, JWT_SECRET, { expiresIn: '7d' });
+    const token = jwt.sign({ userId: user.id, email }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
     const elapsed = Date.now() - startTime;
     console.log(`[REGISTER] 注册成功: userId=${user.id}, email=${email} (${elapsed}ms)`);
     res.json({
@@ -299,7 +303,7 @@ app.post('/api/login', async (req, res) => {
       return res.status(400).json({ success: false, error: '邮箱或密码错误' });
     }
 
-    const token = jwt.sign({ userId: user.id, email: user.email }, JWT_SECRET, { expiresIn: '7d' });
+    const token = jwt.sign({ userId: user.id, email: user.email }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
     const elapsed = Date.now() - startTime;
     console.log(`[LOGIN] 登录成功: userId=${user.id}, email=${email} (${elapsed}ms)`);
     res.json({
@@ -411,7 +415,6 @@ app.get('/api/tasks', authMiddleware, async (req, res) => {
     sql += ' AND status = ?';
     params.push(status);
   } else if (completed !== undefined) {
-    // 旧版兼容：completed=1 → status='completed'，completed=0 → status='pending'
     sql += ' AND status = ?';
     params.push(parseInt(completed) === 1 ? 'completed' : 'pending');
   }
@@ -497,7 +500,6 @@ app.patch('/api/tasks/:id/toggle', authMiddleware, async (req, res) => {
   const task = await db.get('SELECT * FROM tasks WHERE id = ? AND user_id = ?', [req.params.id, req.userId]);
   if (!task) return res.status(404).json({ error: '事项不存在' });
 
-  // toggle 仅在 pending 和 completed 之间切换；unfinished 则恢复为 pending
   const curStatus = task.status || (task.completed ? 'completed' : 'pending');
   let newStatus, newCompleted;
   if (curStatus === 'pending') {
@@ -537,18 +539,9 @@ app.get('/api/expenses', authMiddleware, async (req, res) => {
     // 计算该月的最后一天，避免写死31导致越界
     var y = parseInt(year, 10);
     var m = parseInt(month, 10);
-    var lastDay = new Date(y, m, 0).getDate(); // m=6 -> 6月0日即5月31日？不对，new Date(y,m,0) = 上月最后一天
-    // 正确：new Date(2026, 6, 0) = 6月0日 = 5月31日，所以用 new Date(y, m+1, 0)
-    // 这里 m 是整数，比如6月，则 new Date(2026, 6, 0) = 5月31日
-    // 需要传入 m 而非 m-1，因为 JS 月份从0开始
-    var lastDayDate = new Date(y, m, 0); // m=6 → 2026年6月0日 → 5月31日 ❌
-    // 正确做法：new Date(y, m-1+1, 0) = new Date(y, m, 0)
-    // 但 m 就是用户传入的月份数字(1-12)，所以 new Date(y, m, 0) 能得到该月最后一天
-    // 验证：new Date(2026, 6, 0) = 2026-06-30 ✅ (JS month从0开始，所以month=6对应7月，0日=6月最后一天)
-    // 等等：new Date(2026, 1, 0) = 1月0日 = 12月31日，不对
-    // 重新理解：JS Date(年, 月索引, 日)，月索引0=1月
-    // new Date(2026, 0, 0) = 2026年1月0日 = 2025年12月31日
-    // new Date(2026, 6, 0) = 2026年7月0日 = 2026年6月30日 ✅
+    // JS: new Date(y, m, 0).getDate() 正确获取每月最后一天
+    // 例: new Date(2026, 6, 0) → 2026年6月0日 → 6月最后一天 = 30 ✅
+    var lastDay = new Date(y, m, 0).getDate();
     var startDate = y + '-' + String(m).padStart(2, '0') + '-01';
     var endDate = y + '-' + String(m).padStart(2, '0') + '-' + String(lastDay).padStart(2, '0');
     console.log('[EXPENSES GET] 日期范围:', startDate, '~', endDate, '(该月共' + lastDay + '天)');
@@ -705,7 +698,6 @@ app.get('/api/pets', authMiddleware, async (req, res) => {
     'SELECT * FROM pets WHERE user_id = ? ORDER BY created_at DESC',
     [req.userId]
   );
-  // 为每只宠物附带最近3条健康事件
   for (const pet of pets) {
     pet.recent_events = await db.all(
       'SELECT * FROM pet_health_events WHERE pet_id = ? ORDER BY event_date DESC LIMIT 3',
@@ -868,13 +860,14 @@ app.use((err, req, res, next) => {
 
 // ========== 启动 ==========
 console.log('========================================');
-console.log('   ⏰ 时间管理大师 v2.0');
+console.log('   ⏰ 时间管理大师 v2.7');
 console.log('========================================');
 console.log(`   环境: ${IS_PRODUCTION ? '生产 (Production)' : '开发 (Development)'}`);
 console.log(`   端口: ${PORT}`);
 console.log(`   数据库类型: TiDB Cloud (MySQL)`);
 console.log(`   DATABASE_URL 已配置: ${process.env.DATABASE_URL ? '✅ 是' : '❌ 否'}`);
 console.log(`   JWT_SECRET 已配置: ${process.env.JWT_SECRET ? '✅ 是 (自定义)' : '⚠️ 否 (使用默认值)'}`);
+console.log(`   JWT 过期时间: ${JWT_EXPIRES_IN}`);
 console.log(`   CORS: ${IS_PRODUCTION ? (process.env.CORS_ORIGIN || '允许所有来源') : '允许所有来源 (开发模式)'}`);
 console.log('========================================');
 

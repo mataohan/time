@@ -1,7 +1,7 @@
 {
   "name": "time-management-master",
-  "version": "1.0.0",
-  "description": "时间管理大师 - 高端冷色风手账应用",
+  "version": "2.7.0",
+  "description": "时间管理大师 - 云端同步手账应用",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
