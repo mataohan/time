@@ -410,10 +410,12 @@ app.get('/api/diaries', authMiddleware, async (req, res) => {
   const params = [req.userId];
 
   if (year && month) {
-    const start = `${year}-${String(month).padStart(2, '0')}-01`;
-    const end = `${year}-${String(month).padStart(2, '0')}-31`;
-    sql += ' AND diary_date >= ? AND diary_date <= ?';
-    params.push(start, end);
+    // 使用 YEAR() 和 MONTH() 函数，精准匹配，不受日期边界和时区影响
+    sql += ' AND YEAR(diary_date) = ? AND MONTH(diary_date) = ?';
+    params.push(parseInt(year), parseInt(month));
+  } else if (year) {
+    sql += ' AND YEAR(diary_date) = ?';
+    params.push(parseInt(year));
   }
   if (category) {
     sql += ' AND category = ?';
@@ -421,6 +423,11 @@ app.get('/api/diaries', authMiddleware, async (req, res) => {
   }
 
   sql += ' ORDER BY diary_date DESC, created_at DESC';
+
+  // 调试日志：打印查询参数和 SQL
+  console.log(`[API] 接收参数: year=${year}, month=${month}, category=${category || '无'}`);
+  console.log(`[API] SQL: ${sql}, params: [${params.join(', ')}]`);
+
   const diaries = await db.all(sql, params);
   res.json({ diaries });
 });
@@ -621,6 +628,11 @@ app.get('/api/expenses', authMiddleware, async (req, res) => {
   }
 
   sql += ' ORDER BY expense_date DESC, created_at DESC';
+
+  // 调试日志：打印查询参数和 SQL
+  console.log(`[API] 接收参数: year=${year}, month=${month}`);
+  console.log(`[API] SQL: ${sql}, params: [${params.join(', ')}]`);
+
   const expenses = await db.all(sql, params);
   res.json({ expenses });
 });
@@ -683,6 +695,8 @@ app.get('/api/expenses/stats', authMiddleware, async (req, res) => {
   if (!y || !m) {
     return res.status(400).json({ error: 'year 和 month 参数必填' });
   }
+
+  console.log(`[API] 接收参数: year=${y}, month=${m}`);
 
   // 年总额
   const yearRow = await db.get(

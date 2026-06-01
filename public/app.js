@@ -137,8 +137,10 @@ const API = {
 
   // ---- 日记 ----
   getDiaries: (y, m, cat) => {
-    var params = 'year=' + y + '&month=' + m;
-    if (cat) params += '&category=' + cat;
+    // 确保 year/month 是整数（1-12），不做任何月份偏移
+    var params = 'year=' + parseInt(y) + '&month=' + parseInt(m);
+    if (cat) params += '&category=' + encodeURIComponent(cat);
+    console.log('[请求] GET /api/diaries?' + params);
     return API.get('/api/diaries?' + params);
   },
   getDiariesByDate: (d) => API.get('/api/diaries/date/' + d),
@@ -157,7 +159,11 @@ const API = {
   getStats: () => API.get('/api/stats'),
 
   // ---- 记账 ----
-  getExpenses: (params) => API.get('/api/expenses?' + new URLSearchParams(params).toString()),
+  getExpenses: (params) => {
+    var qs = new URLSearchParams(params).toString();
+    console.log('[请求] GET /api/expenses?' + qs);
+    return API.get('/api/expenses?' + qs);
+  },
   createExpense: (b) => API.post('/api/expenses', b),
   updateExpense: (id, b) => API.put('/api/expenses/' + id, b),
   deleteExpense: (id) => API.del('/api/expenses/' + id),
