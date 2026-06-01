@@ -6,7 +6,7 @@
 (function() {
   var errEl = document.getElementById('jsLoadError');
   if (errEl) errEl.style.display = 'none';
-  console.log('[APP] app.js 加载成功 ✅ 版本: v2.6');
+  console.log('[APP] app.js 加载成功 ✅ 版本: v2.9');
 })();
 
 // ==================== API 通信层 ====================
@@ -37,8 +37,26 @@ const API = {
   },
 
   async _fetch(url, options = {}) {
+    // 🔧 关键修复：每次请求时实时从 localStorage 读取最新 token，防止 this.token 未同步
+    var currentToken = this.token;
+    // 如果内存中的 token 为空，尝试从 localStorage 恢复（处理页面刷新后 token 丢失的情况）
+    if (!currentToken) {
+      var storedToken = localStorage.getItem('tm_token');
+      if (storedToken) {
+        console.warn('[API] ⚠️ 内存中 token 为空，但从 localStorage 恢复 (长度=' + storedToken.length + ')');
+        this.token = storedToken;
+        currentToken = storedToken;
+      }
+    }
+
     const headers = { 'Content-Type': 'application/json', ...options.headers };
-    if (this.token) headers['Authorization'] = 'Bearer ' + this.token;
+    if (currentToken) {
+      headers['Authorization'] = 'Bearer ' + currentToken;
+      // 详细日志：每次请求都打印 token 摘要，方便排查
+      console.log('[API] 📡 请求: ' + (options.method || 'GET') + ' ' + url + ' | token=' + currentToken.substring(0, 12) + '... | token长度=' + currentToken.length);
+    } else {
+      console.warn('[API] ⚠️ 请求未携带 token: ' + (options.method || 'GET') + ' ' + url);
+    }
 
     // 默认 15 秒超时
     const timeoutMs = options.timeout || 15000;
@@ -71,7 +89,7 @@ const API = {
 
     // 401 自动登出
     if (res.status === 401) {
-      console.warn('[API] 收到 401 未授权 (code=' + (data.code || 'unknown') + ')，自动登出');
+      console.warn('[API] 收到 401 未授权 (code=' + (data.code || 'unknown') + ')，当前token=' + (currentToken ? currentToken.substring(0, 12) + '...' : '无'));
       API.setToken('');
       localStorage.removeItem('tm_user');
       // 只在实际显示 app 页面时才切回登录页（避免无限循环）
@@ -295,9 +313,13 @@ document.getElementById('authForm').addEventListener('submit', async function (e
       } else {
         result = await API.register({ email: email, password: password, nickname: nickname });
       }
+      // 🔧 修复：登录成功后同时保存 token 到 localStorage 和内存
+      console.log('[AUTH] 登录成功，保存 token: 长度=' + result.token.length + ', 前12字符=' + result.token.substring(0, 12) + '...');
       API.setToken(result.token);
       user = result.user;
       localStorage.setItem('tm_user', JSON.stringify(user));
+      // 确保 token 也被单独存储（setToken 已做，此处是双重保障）
+      localStorage.setItem('tm_token', result.token);
       toast(result.message || '登录成功');
       showApp();
       return; // 成功，直接返回
@@ -2177,11 +2199,25 @@ async function debugToken() {
 
 // ==================== 初始化 ====================
 (function () {
+  // 🔧 关键修复：初始化时先确保 token 和 localStorage 同步
+  // 如果内存中 token 为空但 localStorage 中有，从 localStorage 恢复
+  if (!API.token) {
+    var storedToken = localStorage.getItem('tm_token');
+    if (storedToken) {
+      console.log('[INIT] 🔧 从 localStorage 恢复 token (长度=' + storedToken.length + ')');
+      API.token = storedToken;
+    } else if (user && user.token) {
+      // 兼容旧版：从 user 对象中恢复 token
+      console.log('[INIT] 🔧 从 user.token 恢复并迁移 token');
+      API.token = user.token;
+      localStorage.setItem('tm_token', user.token);
+    }
+  }
+
   console.log('[INIT] 初始化开始: user=' + (user ? user.email : 'null') + ', token=' + (API.token ? '有(长度=' + API.token.length + ')' : '无'));
 
-  // 修复：如果 user 存在但 token 缺失（如从旧版迁移），尝试从 user 中恢复
+  // 修复：如果 user 存在但 token 缺失，需要重新登录
   if (user && !API.token) {
-    // 用户信息存在但没有独立的 token，需要重新登录
     console.warn('[INIT] user 存在但 token 缺失，清除用户状态要求重新登录');
     localStorage.removeItem('tm_user');
     user = null;
