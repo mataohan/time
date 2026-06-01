@@ -195,6 +195,14 @@ function authMiddleware(req, res, next) {
       console.log(`[AUTH] ❌ 令牌已过期 (${req.method} ${req.path}): ${expiredInfo || err.message}, expiredAt=${err.expiredAt}`);
       return res.status(401).json({ error: '登录已过期，请重新登录', code: 'TOKEN_EXPIRED' });
     }
+    if (err.message && err.message.includes('invalid signature')) {
+      console.error(`[AUTH] ❌ Token验证失败: invalid signature - 请检查 JWT_SECRET 是否一致！`);
+      console.error(`[AUTH]    当前服务器 JWT_SECRET 来源: ${process.env.JWT_SECRET ? '环境变量' : '默认值(time_master_secret_2025)'}`);
+      console.error(`[AUTH]    如果此 token 是由另一个实例签发的，说明两个实例的 JWT_SECRET 不一致`);
+      console.error(`[AUTH]    解决方案: 在 Render 上设置 JWT_SECRET=time_master_secret_2025 环境变量`);
+      console.error(`[AUTH]    请求详情: ${req.method} ${req.path}, ${expiredInfo}`);
+      return res.status(401).json({ error: '登录凭证无效，请重新登录（可能是服务器密钥不一致）', code: 'TOKEN_SIGNATURE_MISMATCH' });
+    }
     console.log(`[AUTH] ❌ 令牌无效 (${req.method} ${req.path}): ${err.message} ${expiredInfo}`);
     return res.status(401).json({ error: '登录已过期，请重新登录', code: 'TOKEN_INVALID' });
   }
@@ -881,6 +889,14 @@ console.log(`   环境: ${IS_PRODUCTION ? '生产 (Production)' : '开发 (Devel
 console.log(`   端口: ${PORT}`);
 console.log(`   数据库类型: TiDB Cloud (MySQL)`);
 console.log(`   DATABASE_URL 已配置: ${process.env.DATABASE_URL ? '✅ 是' : '❌ 否'}`);
+if (!process.env.JWT_SECRET) {
+  console.warn('   ⚠️ 警告: JWT_SECRET 环境变量未设置！');
+  console.warn('   ⚠️ 将使用默认值 "time_master_secret_2025"');
+  console.warn('   ⚠️ 如果 Render 上重新部署且未设置 JWT_SECRET 环境变量，');
+  console.warn('   ⚠️ 新实例会使用默认值签发 token，但旧 token 可能无效。');
+  console.warn('   ⚠️ 建议在 Render 环境变量中设置 JWT_SECRET=time_master_secret_2025');
+  console.warn('   ⚠️ 确保所有实例使用相同的 JWT_SECRET！');
+}
 console.log(`   JWT_SECRET 已配置: ${process.env.JWT_SECRET ? '✅ 是 (自定义, 长度=' + process.env.JWT_SECRET.length + ')' : '⚠️ 否 (使用默认值, 长度=' + JWT_SECRET.length + ')'}`);
 console.log(`   CORS: ${IS_PRODUCTION ? (process.env.CORS_ORIGIN || '允许所有来源') : '允许所有来源 (开发模式)'}`);
 console.log('========================================');

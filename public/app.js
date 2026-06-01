@@ -2199,6 +2199,51 @@ document.addEventListener('keydown', function (e) {
   }
 });
 
+// ==================== Token 过期检测（客户端本地解码） ====================
+/**
+ * 检查 token 是否已过期（客户端本地解码 exp 字段，无需网络请求）
+ * @returns {{ expired: boolean, expiresAt: string|null, remainingMinutes: number|null }}
+ */
+function checkTokenExpiry() {
+  var token = localStorage.getItem('tm_token');
+  if (!token) return { expired: true, expiresAt: null, remainingMinutes: null };
+
+  try {
+    // 解析 JWT payload（中间段是 base64url 编码的 JSON）
+    var parts = token.split('.');
+    if (parts.length !== 3) return { expired: true, expiresAt: null, remainingMinutes: null };
+
+    // base64url 转 base64，然后 atob 解码
+    var payload = parts[1];
+    payload = payload.replace(/-/g, '+').replace(/_/g, '/');
+    // 补齐 padding
+    while (payload.length % 4) payload += '=';
+    var decoded = JSON.parse(atob(payload));
+
+    if (!decoded.exp) return { expired: false, expiresAt: null, remainingMinutes: null };
+
+    var expMs = decoded.exp * 1000;
+    var nowMs = Date.now();
+    var remainingMs = expMs - nowMs;
+    var remainingMinutes = Math.max(0, Math.floor(remainingMs / 60000));
+    var expired = remainingMs <= 0;
+
+    var expiresAt = new Date(expMs).toISOString();
+
+    if (expired) {
+      console.warn('[TOKEN-CHECK] ⚠️ Token 已过期! 过期时间: ' + expiresAt + ', 当前时间: ' + new Date().toISOString());
+    } else {
+      var remainingDays = (remainingMs / 86400000).toFixed(1);
+      console.log('[TOKEN-CHECK] ✅ Token 有效, 过期时间: ' + expiresAt + ', 剩余: ' + remainingDays + ' 天 (' + remainingMinutes + ' 分钟)');
+    }
+
+    return { expired: expired, expiresAt: expiresAt, remainingMinutes: remainingMinutes };
+  } catch (e) {
+    console.error('[TOKEN-CHECK] 解码 token 失败:', e.message);
+    return { expired: false, expiresAt: null, remainingMinutes: null };
+  }
+}
+
 // ==================== Token 诊断工具（开发调试用） ====================
 async function debugToken() {
   try {
@@ -2246,16 +2291,39 @@ async function debugToken() {
     var ap = document.getElementById('authPage');
     if (ap) ap.style.display = 'none';
 
-    // 启动时快速验证 token 有效性
+    // 🔧 第一步：客户端本地快速检查 token 是否过期（无需网络请求）
+    var expiryCheck = checkTokenExpiry();
+    if (expiryCheck.expired) {
+      console.warn('[INIT] ⚠️ Token 已过期（客户端本地检测），清除登录状态');
+      API.setToken('');
+      localStorage.removeItem('tm_user');
+      user = null;
+      // 恢复显示登录页
+      if (ap) ap.style.display = 'flex';
+      var appEl = document.getElementById('appPage');
+      if (appEl) appEl.style.display = 'none';
+      toast('登录已过期，请重新登录', 'error');
+      return; // 不继续初始化
+    }
+
+    // 🔧 第二步：启动时通过网络请求验证 token 有效性（检查签名是否匹配）
     API._fetch('/api/auth/debug', { timeout: 5000 }).then(function(debugInfo) {
       if (debugInfo.valid) {
         console.log('[INIT] ✅ Token 有效, 剩余 ' + debugInfo.remainingDays + ' 天');
         showApp();
       } else {
         console.warn('[INIT] ⚠️ Token 无效:', debugInfo.error);
+        // 检查是否是签名不匹配
+        if (debugInfo.error && debugInfo.error.indexOf('invalid signature') !== -1) {
+          console.error('[INIT] 🔑 Token 签名不匹配！可能是服务器 JWT_SECRET 不一致');
+          console.error('[INIT]    请确保 Render 环境变量 JWT_SECRET 设置为 time_master_secret_2025');
+        }
         API.setToken('');
         localStorage.removeItem('tm_user');
         user = null;
+        if (ap) ap.style.display = 'flex';
+        var appEl2 = document.getElementById('appPage');
+        if (appEl2) appEl2.style.display = 'none';
         toast('登录已过期，请重新登录', 'error');
       }
     }).catch(function(err) {
