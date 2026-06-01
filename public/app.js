@@ -6,16 +6,35 @@
 (function() {
   var errEl = document.getElementById('jsLoadError');
   if (errEl) errEl.style.display = 'none';
-  console.log('[APP] app.js 加载成功 ✅ 版本: v2.5');
+  console.log('[APP] app.js 加载成功 ✅ 版本: v2.6');
 })();
 
 // ==================== API 通信层 ====================
 const API_BASE = window.location.origin;
 
 const API = {
-  token: localStorage.getItem('tm_token'),
+  // 同时检查两个可能的存储键（兼容旧版 tm_user 和新版 tm_token）
+  token: localStorage.getItem('tm_token') || (function() {
+    // 兼容旧版：如果 tm_token 不存在但 tm_user 中有 token，迁移过来
+    var oldUser = null;
+    try { oldUser = JSON.parse(localStorage.getItem('tm_user')); } catch(e) {}
+    if (oldUser && oldUser.token) {
+      console.log('[API] 从 tm_user 迁移 token 到 tm_token');
+      localStorage.setItem('tm_token', oldUser.token);
+      return oldUser.token;
+    }
+    return '';
+  })(),
 
-  setToken(t) { this.token = t; localStorage.setItem('tm_token', t || ''); },
+  setToken(t) {
+    this.token = t || '';
+    if (t) {
+      localStorage.setItem('tm_token', t);
+    } else {
+      localStorage.removeItem('tm_token');
+    }
+    console.log('[API] token 已' + (t ? '设置' : '清除') + (t ? ' (长度=' + t.length + ', 前10字符=' + t.substring(0, 10) + '...)' : ''));
+  },
 
   async _fetch(url, options = {}) {
     const headers = { 'Content-Type': 'application/json', ...options.headers };
@@ -49,12 +68,15 @@ const API = {
       console.error('[API] JSON 解析失败:', url, res.status, jsonErr.message);
       throw new Error('服务器返回了无效的响应 (' + res.status + ')');
     }
+
     // 401 自动登出
     if (res.status === 401) {
-      console.warn('[API] 收到 401 未授权，自动登出');
+      console.warn('[API] 收到 401 未授权 (code=' + (data.code || 'unknown') + ')，自动登出');
       API.setToken('');
       localStorage.removeItem('tm_user');
-      if (document.getElementById('appPage').style.display !== 'none') {
+      // 只在实际显示 app 页面时才切回登录页（避免无限循环）
+      var appPage = document.getElementById('appPage');
+      if (appPage && appPage.style.display !== 'none') {
         document.getElementById('authPage').style.display = 'flex';
         document.getElementById('appPage').style.display = 'none';
         toast('登录已过期，请重新登录', 'error');
@@ -304,9 +326,11 @@ document.getElementById('authForm').addEventListener('submit', async function (e
 
 async function logout() {
   try { await API.logout(); } catch (e) { /* ignore */ }
+  console.log('[AUTH] 用户登出');
   API.setToken('');
   user = null;
   localStorage.removeItem('tm_user');
+  localStorage.removeItem('tm_token');  // 确保同时清除
   document.getElementById('authPage').style.display = 'flex';
   document.getElementById('appPage').style.display = 'none';
   toast('已退出登录');
@@ -2136,15 +2160,58 @@ document.addEventListener('keydown', function (e) {
   }
 });
 
+// ==================== Token 诊断工具（开发调试用） ====================
+async function debugToken() {
+  try {
+    var result = await fetch(API_BASE + '/api/auth/debug', {
+      headers: API.token ? { 'Authorization': 'Bearer ' + API.token } : {}
+    });
+    var info = await result.json();
+    console.log('[TOKEN-DEBUG] Token 状态:', JSON.stringify(info, null, 2));
+    return info;
+  } catch (e) {
+    console.error('[TOKEN-DEBUG] 诊断失败:', e.message);
+    return null;
+  }
+}
+
 // ==================== 初始化 ====================
 (function () {
+  console.log('[INIT] 初始化开始: user=' + (user ? user.email : 'null') + ', token=' + (API.token ? '有(长度=' + API.token.length + ')' : '无'));
+
+  // 修复：如果 user 存在但 token 缺失（如从旧版迁移），尝试从 user 中恢复
+  if (user && !API.token) {
+    // 用户信息存在但没有独立的 token，需要重新登录
+    console.warn('[INIT] user 存在但 token 缺失，清除用户状态要求重新登录');
+    localStorage.removeItem('tm_user');
+    user = null;
+  }
+
   if (user && API.token) {
     var ap = document.getElementById('authPage');
     if (ap) ap.style.display = 'none';
-    showApp();
+
+    // 启动时快速验证 token 有效性
+    API._fetch('/api/auth/debug', { timeout: 5000 }).then(function(debugInfo) {
+      if (debugInfo.valid) {
+        console.log('[INIT] ✅ Token 有效, 剩余 ' + debugInfo.remainingDays + ' 天');
+        showApp();
+      } else {
+        console.warn('[INIT] ⚠️ Token 无效:', debugInfo.error);
+        API.setToken('');
+        localStorage.removeItem('tm_user');
+        user = null;
+        toast('登录已过期，请重新登录', 'error');
+      }
+    }).catch(function(err) {
+      // 诊断接口失败可能只是网络问题，仍然尝试显示应用
+      console.warn('[INIT] 诊断接口调用失败，仍尝试进入应用:', err.message);
+      showApp();
+    });
   } else {
     API.setToken('');
     localStorage.removeItem('tm_user');
     user = null;
+    console.log('[INIT] 未登录，显示登录页');
   }
 })();

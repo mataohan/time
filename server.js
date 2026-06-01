@@ -169,15 +169,78 @@ function authMiddleware(req, res, next) {
     const decoded = jwt.verify(token, JWT_SECRET);
     req.userId = decoded.userId;
     req.userEmail = decoded.email;
+
+    // 详细日志：显示 token 的签发时间和过期时间
+    const iatDate = new Date(decoded.iat * 1000).toISOString();
+    const expDate = new Date(decoded.exp * 1000).toISOString();
+    const remainingMs = decoded.exp * 1000 - Date.now();
+    const remainingDays = Math.max(0, (remainingMs / 86400000).toFixed(1));
+    console.log(`[AUTH] ✅ 令牌验证通过: userId=${decoded.userId}, email=${decoded.email}, 签发=${iatDate}, 过期=${expDate}, 剩余=${remainingDays}天 (${req.method} ${req.path})`);
+
     next();
   } catch (err) {
-    console.log(`[AUTH] 拒绝: 令牌无效 (${req.method} ${req.path}) - ${err.message}`);
+    const token = authHeader.split(' ')[1];
+    // 尝试解码已过期的 token 以获取更多诊断信息
+    let expiredInfo = '';
+    try {
+      const decoded = jwt.decode(token, { complete: true });
+      if (decoded && decoded.payload) {
+        const expDate = new Date(decoded.payload.exp * 1000).toISOString();
+        const iatDate = new Date(decoded.payload.iat * 1000).toISOString();
+        expiredInfo = `userId=${decoded.payload.userId}, 签发=${iatDate}, 过期=${expDate}, 当前时间=${new Date().toISOString()}`;
+      }
+    } catch (e) { /* ignore decode error */ }
+
     if (err.name === 'TokenExpiredError') {
+      console.log(`[AUTH] ❌ 令牌已过期 (${req.method} ${req.path}): ${expiredInfo || err.message}, expiredAt=${err.expiredAt}`);
       return res.status(401).json({ error: '登录已过期，请重新登录', code: 'TOKEN_EXPIRED' });
     }
+    console.log(`[AUTH] ❌ 令牌无效 (${req.method} ${req.path}): ${err.message} ${expiredInfo}`);
     return res.status(401).json({ error: '登录已过期，请重新登录', code: 'TOKEN_INVALID' });
   }
 }
+
+// ========== Token 诊断接口（不经过 authMiddleware，方便排查问题） ==========
+app.get('/api/auth/debug', (req, res) => {
+  const authHeader = req.headers.authorization;
+  const result = {
+    hasAuthHeader: !!authHeader,
+    authHeaderPrefix: authHeader ? authHeader.substring(0, 20) + '...' : 'none',
+    serverTime: new Date().toISOString(),
+    jwtSecretSource: process.env.JWT_SECRET ? '环境变量（自定义）' : '默认值（time_master_secret_2025）',
+    jwtSecretLength: JWT_SECRET.length,
+    serverUptime: Math.floor(process.uptime()) + 's'
+  };
+
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.split(' ')[1];
+    try {
+      const decoded = jwt.verify(token, JWT_SECRET);
+      result.valid = true;
+      result.userId = decoded.userId;
+      result.email = decoded.email;
+      result.issuedAt = new Date(decoded.iat * 1000).toISOString();
+      result.expiresAt = new Date(decoded.exp * 1000).toISOString();
+      result.remainingDays = ((decoded.exp * 1000 - Date.now()) / 86400000).toFixed(1);
+      result.remainingHours = ((decoded.exp * 1000 - Date.now()) / 3600000).toFixed(1);
+    } catch (err) {
+      result.valid = false;
+      result.error = err.name + ': ' + err.message;
+      // 尝试解码过期的 token
+      try {
+        const decoded = jwt.decode(token, { complete: true });
+        if (decoded && decoded.payload) {
+          result.decodedPayload = decoded.payload;
+          result.expiredAt = new Date(decoded.payload.exp * 1000).toISOString();
+        }
+      } catch (e) {
+        result.decodeError = e.message;
+      }
+    }
+  }
+
+  res.json(result);
+});
 
 // ========== 健康检查 ==========
 app.get('/api/health', async (req, res) => {
@@ -254,7 +317,11 @@ app.post('/api/register', async (req, res) => {
 
     const token = jwt.sign({ userId: user.id, email }, JWT_SECRET, { expiresIn: '30d' });
     const elapsed = Date.now() - startTime;
-    console.log(`[REGISTER] 注册成功: userId=${user.id}, email=${email} (${elapsed}ms)`);
+
+    // 验证签发后的 token 信息
+    const decoded = jwt.decode(token);
+    const expDate = new Date(decoded.exp * 1000).toISOString();
+    console.log(`[REGISTER] 注册成功: userId=${user.id}, email=${email}, token过期=${expDate}, 有效期=30天 (${elapsed}ms)`);
     res.json({
       success: true,
       message: '注册成功',
@@ -304,7 +371,11 @@ app.post('/api/login', async (req, res) => {
 
     const token = jwt.sign({ userId: user.id, email: user.email }, JWT_SECRET, { expiresIn: '30d' });
     const elapsed = Date.now() - startTime;
-    console.log(`[LOGIN] 登录成功: userId=${user.id}, email=${email} (${elapsed}ms)`);
+
+    // 验证签发后的 token 信息
+    const decoded = jwt.decode(token);
+    const expDate = new Date(decoded.exp * 1000).toISOString();
+    console.log(`[LOGIN] 登录成功: userId=${user.id}, email=${email}, token过期=${expDate}, 有效期=30天 (${elapsed}ms)`);
     res.json({
       success: true,
       message: '登录成功',
@@ -810,7 +881,7 @@ console.log(`   环境: ${IS_PRODUCTION ? '生产 (Production)' : '开发 (Devel
 console.log(`   端口: ${PORT}`);
 console.log(`   数据库类型: TiDB Cloud (MySQL)`);
 console.log(`   DATABASE_URL 已配置: ${process.env.DATABASE_URL ? '✅ 是' : '❌ 否'}`);
-console.log(`   JWT_SECRET 已配置: ${process.env.JWT_SECRET ? '✅ 是 (自定义)' : '⚠️ 否 (使用默认值)'}`);
+console.log(`   JWT_SECRET 已配置: ${process.env.JWT_SECRET ? '✅ 是 (自定义, 长度=' + process.env.JWT_SECRET.length + ')' : '⚠️ 否 (使用默认值, 长度=' + JWT_SECRET.length + ')'}`);
 console.log(`   CORS: ${IS_PRODUCTION ? (process.env.CORS_ORIGIN || '允许所有来源') : '允许所有来源 (开发模式)'}`);
 console.log('========================================');
 
