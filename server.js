@@ -614,7 +614,7 @@ app.patch('/api/tasks/:id/toggle', authMiddleware, async (req, res) => {
 
 // 获取消费记录（使用 YEAR/MONTH 函数精确筛选，避免字符串拼接日期边界问题）
 app.get('/api/expenses', authMiddleware, async (req, res) => {
-  const { year, month } = req.query;
+  const { year, month, category } = req.query;
   let sql = 'SELECT * FROM expenses WHERE user_id = ?';
   const params = [req.userId];
 
@@ -627,10 +627,15 @@ app.get('/api/expenses', authMiddleware, async (req, res) => {
     params.push(parseInt(year));
   }
 
+  if (category && category !== 'all') {
+    sql += ' AND category = ?';
+    params.push(category);
+  }
+
   sql += ' ORDER BY expense_date DESC, created_at DESC';
 
   // 调试日志：打印查询参数和 SQL
-  console.log(`[API] 接收参数: year=${year}, month=${month}`);
+  console.log(`[API] 接收参数: year=${year}, month=${month}, category=${category || '无'}`);
   console.log(`[API] SQL: ${sql}, params: [${params.join(', ')}]`);
 
   const expenses = await db.all(sql, params);
@@ -688,7 +693,7 @@ app.delete('/api/expenses/:id', authMiddleware, async (req, res) => {
 
 // 记账统计：返回年总额、月总额、分类汇总
 app.get('/api/expenses/stats', authMiddleware, async (req, res) => {
-  const { year, month } = req.query;
+  const { year, month, category } = req.query;
   const y = parseInt(year);
   const m = parseInt(month);
 
@@ -696,22 +701,27 @@ app.get('/api/expenses/stats', authMiddleware, async (req, res) => {
     return res.status(400).json({ error: 'year 和 month 参数必填' });
   }
 
-  console.log(`[API] 接收参数: year=${y}, month=${m}`);
+  const catFilter = (category && category !== 'all') ? category : null;
+  console.log(`[API] 接收参数: year=${y}, month=${m}, category=${catFilter || '无'}`);
+
+  // 构建 category 条件 SQL 片段
+  const catSql = catFilter ? ' AND category = ?' : '';
+  const catParam = catFilter ? [catFilter] : [];
 
   // 年总额
   const yearRow = await db.get(
-    'SELECT COALESCE(SUM(amount), 0) AS total FROM expenses WHERE user_id = ? AND YEAR(expense_date) = ?',
-    [req.userId, y]
+    'SELECT COALESCE(SUM(amount), 0) AS total FROM expenses WHERE user_id = ? AND YEAR(expense_date) = ?' + catSql,
+    [req.userId, y, ...catParam]
   );
   // 月总额
   const monthRow = await db.get(
-    'SELECT COALESCE(SUM(amount), 0) AS total FROM expenses WHERE user_id = ? AND YEAR(expense_date) = ? AND MONTH(expense_date) = ?',
-    [req.userId, y, m]
+    'SELECT COALESCE(SUM(amount), 0) AS total FROM expenses WHERE user_id = ? AND YEAR(expense_date) = ? AND MONTH(expense_date) = ?' + catSql,
+    [req.userId, y, m, ...catParam]
   );
   // 分类汇总
   const catRows = await db.all(
-    'SELECT category, COALESCE(SUM(amount), 0) AS total FROM expenses WHERE user_id = ? AND YEAR(expense_date) = ? AND MONTH(expense_date) = ? GROUP BY category',
-    [req.userId, y, m]
+    'SELECT category, COALESCE(SUM(amount), 0) AS total FROM expenses WHERE user_id = ? AND YEAR(expense_date) = ? AND MONTH(expense_date) = ?' + catSql + ' GROUP BY category',
+    [req.userId, y, m, ...catParam]
   );
 
   const categories = {};

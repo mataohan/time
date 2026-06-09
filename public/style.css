@@ -313,6 +313,8 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;bottom:0;background:
 .expense-filter-bar select:focus{border-color:var(--accent)}
 .btn-filter-query{padding:10px 28px;background:linear-gradient(135deg,var(--accent),var(--accent-3));border:none;border-radius:22px;color:#fff;cursor:pointer;font-size:15px;font-weight:600;transition:var(--transition);min-height:44px}
 .btn-filter-query:hover{box-shadow:0 4px 15px rgba(79,195,247,0.3);transform:translateY(-1px)}
+.btn-filter-reset{padding:10px 22px;background:transparent;border:1px solid var(--border);border-radius:22px;color:var(--text-secondary);cursor:pointer;font-size:15px;font-weight:500;transition:var(--transition);min-height:44px}
+.btn-filter-reset:hover{border-color:var(--text-muted);color:var(--text-primary);background:var(--bg-card-hover)}
 .expense-body{display:grid;grid-template-columns:360px 1fr;gap:24px;align-items:start}
 .expense-calendar-panel{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);overflow:visible}
 .expense-detail{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:24px 28px}
