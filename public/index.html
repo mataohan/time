@@ -36,6 +36,7 @@
     <button class="tab-btn active" onclick="switchTab('calendar')">📅 日历手账</button>
     <button class="tab-btn" onclick="switchTab('tasks')">✅ 待办事项 <span class="tab-badge" id="pendingBadge">0</span></button>
     <button class="tab-btn" onclick="switchTab('expenses')">💰 记账</button>
+    <button class="tab-btn" onclick="switchTab('report')">📊 账单查询</button>
     <button class="tab-btn" onclick="switchTab('pets')">🐱 宠物档案</button>
     <button class="tab-btn" onclick="switchTab('fitness')">🏋️ 健身计划</button>
   </div>
@@ -85,6 +86,48 @@
       <div class="task-list-panel">
         <div class="task-list-header"><h3 id="taskListTitle">全部待办事项</h3><button class="btn-add" onclick="openTaskModal()">+ 新增事项</button></div>
         <div class="task-list" id="taskList"><div class="empty-state"><div class="empty-icon">📝</div><p>暂无待办事项</p></div></div>
+      </div>
+    </div>
+
+    <!-- 账单查询板块 -->
+    <div id="reportTab" class="report-section" style="display:none;">
+      <div class="report-filter-bar">
+        <span class="report-filter-label">📊 账单查询</span>
+        <select id="rptYear"></select>
+        <select id="rptMonth"></select>
+        <select id="rptCat"></select>
+        <button class="btn-filter-query" onclick="loadExpenseReport()">查询</button>
+        <button class="btn-filter-reset" onclick="resetReportFilter()">重置</button>
+      </div>
+      <div class="report-stats">
+        <div class="report-stat-card">
+          <div class="report-stat-label">📆 月度总额</div>
+          <div class="report-stat-amount" id="rptMonthTotal">¥ 0.00</div>
+        </div>
+        <div class="report-stat-card">
+          <div class="report-stat-label">📊 年度总额</div>
+          <div class="report-stat-amount" id="rptYearTotal">¥ 0.00</div>
+        </div>
+        <div class="report-stat-card">
+          <div class="report-stat-label">📋 记录数</div>
+          <div class="report-stat-amount" id="rptCount">0 条</div>
+        </div>
+      </div>
+      <div class="report-table-wrap">
+        <table class="report-table" id="rptTable">
+          <thead>
+            <tr>
+              <th>日期</th>
+              <th>分类</th>
+              <th>金额</th>
+              <th>备注</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="rptTableBody">
+            <tr><td colspan="5" class="report-empty">请选择筛选条件后点击"查询"</td></tr>
+          </tbody>
+        </table>
       </div>
     </div>
 

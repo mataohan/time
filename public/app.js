@@ -412,6 +412,7 @@ function switchTab(tab) {
     document.getElementById('calendarTab').style.display = 'grid';
     document.getElementById('tasksTab').style.display = 'none';
     document.getElementById('expensesTab').style.display = 'none';
+    document.getElementById('reportTab').style.display = 'none';
     document.getElementById('petsTab').style.display = 'none';
     document.getElementById('fitnessTab').style.display = 'none';
     loadDiaries();
@@ -420,6 +421,7 @@ function switchTab(tab) {
     document.getElementById('calendarTab').style.display = 'none';
     document.getElementById('tasksTab').style.display = 'grid';
     document.getElementById('expensesTab').style.display = 'none';
+    document.getElementById('reportTab').style.display = 'none';
     document.getElementById('petsTab').style.display = 'none';
     document.getElementById('fitnessTab').style.display = 'none';
     loadTasks();
@@ -427,23 +429,35 @@ function switchTab(tab) {
     btns[2].classList.add('active');
     document.getElementById('calendarTab').style.display = 'none';
     document.getElementById('tasksTab').style.display = 'none';
+    document.getElementById('reportTab').style.display = 'none';
     document.getElementById('petsTab').style.display = 'none';
     document.getElementById('fitnessTab').style.display = 'none';
     document.getElementById('expensesTab').style.display = 'block';
     initExpenses();
-  } else if (tab === 'pets') {
+  } else if (tab === 'report') {
     btns[3].classList.add('active');
     document.getElementById('calendarTab').style.display = 'none';
     document.getElementById('tasksTab').style.display = 'none';
     document.getElementById('expensesTab').style.display = 'none';
+    document.getElementById('petsTab').style.display = 'none';
     document.getElementById('fitnessTab').style.display = 'none';
-    document.getElementById('petsTab').style.display = 'block';
-    loadPets();
-  } else if (tab === 'fitness') {
+    document.getElementById('reportTab').style.display = 'block';
+    initExpenseReport();
+  } else if (tab === 'pets') {
     btns[4].classList.add('active');
     document.getElementById('calendarTab').style.display = 'none';
     document.getElementById('tasksTab').style.display = 'none';
     document.getElementById('expensesTab').style.display = 'none';
+    document.getElementById('reportTab').style.display = 'none';
+    document.getElementById('fitnessTab').style.display = 'none';
+    document.getElementById('petsTab').style.display = 'block';
+    loadPets();
+  } else if (tab === 'fitness') {
+    btns[5].classList.add('active');
+    document.getElementById('calendarTab').style.display = 'none';
+    document.getElementById('tasksTab').style.display = 'none';
+    document.getElementById('expensesTab').style.display = 'none';
+    document.getElementById('reportTab').style.display = 'none';
     document.getElementById('petsTab').style.display = 'none';
     document.getElementById('fitnessTab').style.display = 'block';
     initFitness();
@@ -1803,6 +1817,125 @@ async function expGoToToday() {
   populateExpMonthPicker();
   populateExpFilterBar();
   await loadExpenses();
+}
+
+// ==================== 账单查询 ====================
+var reportCache = [];
+
+function initExpenseReport() {
+  var now = new Date();
+  var ySel = document.getElementById('rptYear');
+  var mSel = document.getElementById('rptMonth');
+  var cSel = document.getElementById('rptCat');
+  var cy = now.getFullYear();
+  var cm = now.getMonth() + 1;
+
+  if (ySel) {
+    ySel.innerHTML = '';
+    for (var y = cy - 2; y <= cy + 1; y++) {
+      ySel.innerHTML += '<option value="' + y + '" ' + (y === cy ? 'selected' : '') + '>' + y + '年</option>';
+    }
+  }
+  if (mSel) {
+    mSel.innerHTML = '';
+    for (var m = 1; m <= 12; m++) {
+      mSel.innerHTML += '<option value="' + m + '" ' + (m === cm ? 'selected' : '') + '>' + m + '月</option>';
+    }
+  }
+  if (cSel) {
+    cSel.innerHTML = '<option value="all" selected>全部分类</option>';
+    for (var i = 0; i < EXP_CATS.length; i++) {
+      var c = EXP_CATS[i];
+      cSel.innerHTML += '<option value="' + c + '">' + EXP_EMOJI[c] + ' ' + c + '</option>';
+    }
+  }
+  // 首次进入自动加载当前月数据
+  loadExpenseReport();
+}
+
+function resetReportFilter() {
+  var now = new Date();
+  document.getElementById('rptYear').value = now.getFullYear();
+  document.getElementById('rptMonth').value = now.getMonth() + 1;
+  document.getElementById('rptCat').value = 'all';
+  loadExpenseReport();
+}
+
+async function loadExpenseReport() {
+  var yEl = document.getElementById('rptYear');
+  var mEl = document.getElementById('rptMonth');
+  var cEl = document.getElementById('rptCat');
+  var year = parseInt(yEl.value);
+  var month = parseInt(mEl.value);
+  var cat = cEl ? (cEl.value || 'all') : 'all';
+
+  try {
+    // 并行请求明细和统计
+    var params = { year: year, month: month };
+    if (cat && cat !== 'all') params.category = cat;
+
+    var [expResult, stats] = await Promise.all([
+      API.getExpenses(params),
+      API.getExpenseStats(year, month, cat)
+    ]);
+
+    reportCache = (expResult.expenses || []).map(function(e) {
+      e.expense_date = normalizeDate(e.expense_date);
+      return e;
+    });
+
+    // 渲染统计卡片
+    var yt = Number(stats.yearTotal) || 0;
+    var mt = Number(stats.monthTotal) || 0;
+    document.getElementById('rptMonthTotal').textContent = '¥ ' + mt.toFixed(2);
+    document.getElementById('rptYearTotal').textContent = '¥ ' + yt.toFixed(2);
+    document.getElementById('rptCount').textContent = reportCache.length + ' 条';
+
+    // 渲染明细表格
+    renderReportTable();
+  } catch (err) {
+    toast('加载账单失败: ' + err.message, 'error');
+  }
+}
+
+function renderReportTable() {
+  var tbody = document.getElementById('rptTableBody');
+  if (!tbody) return;
+
+  if (reportCache.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="5" class="report-empty">没有符合条件的记账记录</td></tr>';
+    return;
+  }
+
+  var html = '';
+  for (var i = 0; i < reportCache.length; i++) {
+    var e = reportCache[i];
+    html += '<tr>';
+    html += '<td class="report-td-date">' + esc(e.expense_date) + '</td>';
+    html += '<td><span class="expense-cat expense-cat-' + EXP_CSS[e.category] + '">' + EXP_EMOJI[e.category] + ' ' + e.category + '</span></td>';
+    html += '<td class="report-td-amount">¥ ' + Number(e.amount).toFixed(2) + '</td>';
+    html += '<td class="report-td-note">' + (e.note ? esc(e.note) : '—') + '</td>';
+    html += '<td class="report-td-actions">';
+    html += '<button class="btn-task-edit" onclick="openExpenseModal(\'' + e.id + '\')" title="编辑">✏️</button>';
+    html += '<button class="btn-task-del" onclick="deleteReportExpense(\'' + e.id + '\')" title="删除">🗑️</button>';
+    html += '</td>';
+    html += '</tr>';
+  }
+  tbody.innerHTML = html;
+}
+
+async function deleteReportExpense(id) {
+  if (!confirm('确定删除这条消费记录？')) return;
+  try {
+    await API.deleteExpense(id);
+    toast('消费记录已删除');
+    // 重新加载报告数据
+    await loadExpenseReport();
+    // 如果当前也在记账tab，同步刷新
+    if (currentTab === 'expenses') {
+      await loadExpenses();
+    }
+  } catch (err) { toast(err.message, 'error'); }
 }
 
 // ==================== 宠物照片加载失败处理 ====================
