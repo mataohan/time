@@ -306,6 +306,13 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;bottom:0;background:
 .expense-month-picker{display:flex;gap:8px;align-items:center}
 .expense-month-picker select{padding:12px 18px;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text-primary);font-size:15px;cursor:pointer;outline:none;min-height:44px}
 .expense-month-picker select:focus{border-color:var(--accent)}
+/* 记账筛选栏 */
+.expense-filter-bar{display:flex;gap:12px;align-items:center;flex-wrap:wrap;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:16px 24px}
+.expense-filter-label{font-size:15px;font-weight:600;color:var(--text-secondary);white-space:nowrap}
+.expense-filter-bar select{padding:10px 16px;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text-primary);font-size:15px;cursor:pointer;outline:none;min-height:44px;transition:var(--transition)}
+.expense-filter-bar select:focus{border-color:var(--accent)}
+.btn-filter-query{padding:10px 28px;background:linear-gradient(135deg,var(--accent),var(--accent-3));border:none;border-radius:22px;color:#fff;cursor:pointer;font-size:15px;font-weight:600;transition:var(--transition);min-height:44px}
+.btn-filter-query:hover{box-shadow:0 4px 15px rgba(79,195,247,0.3);transform:translateY(-1px)}
 .expense-body{display:grid;grid-template-columns:360px 1fr;gap:24px;align-items:start}
 .expense-calendar-panel{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);overflow:visible}
 .expense-detail{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:24px 28px}
@@ -323,6 +330,8 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;bottom:0;background:
 .expense-cat-entertainment{background:rgba(76,175,80,0.15);color:#4caf50}
 .expense-cat-medical{background:rgba(239,83,80,0.15);color:#ef5350}
 .expense-cat-other{background:rgba(129,212,250,0.15);color:#81d4fa}
+.expense-cat-car{background:rgba(244,67,54,0.15);color:#f44336}
+.expense-cat-toll{background:rgba(158,158,158,0.15);color:#bdbdbd}
 .expense-amount{font-size:20px;font-weight:700;color:var(--text-primary);margin-left:auto;white-space:nowrap}
 .expense-note{width:100%;font-size:14px;color:var(--text-muted);padding-left:4px;margin-top:2px}
 .expense-actions{display:flex;gap:4px;flex-shrink:0}
@@ -333,6 +342,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;bottom:0;background:
 /* Expense calendar dots */
 .exp-dot-dining{background:#ff9800}.exp-dot-shopping{background:#ba68c8}.exp-dot-transport{background:#4dd0e1}
 .exp-dot-entertainment{background:#4caf50}.exp-dot-medical{background:#ef5350}.exp-dot-other{background:#81d4fa}
+.exp-dot-car{background:#f44336}.exp-dot-toll{background:#9e9e9e}
 
 /* ========== 平板适配 ≤1024px ========== */
 @media(max-width:1024px){

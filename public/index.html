@@ -115,6 +115,12 @@
           <select id="expMonthSelect" onchange="changeExpMonth()"></select>
         </div>
       </div>
+      <div class="expense-filter-bar">
+        <span class="expense-filter-label">🔍 账单筛选</span>
+        <select id="expFilterYear"></select>
+        <select id="expFilterMonth"></select>
+        <button class="btn-filter-query" onclick="queryExpenses()">查询</button>
+      </div>
       <div class="expense-body">
         <div class="expense-calendar-panel">
           <div class="calendar-header"><h2 id="expCalendarTitle">日历</h2><div class="calendar-nav"><button onclick="expPrevMonth()">◀</button><button class="btn-today" onclick="expGoToToday()">今天</button><button onclick="expNextMonth()">▶</button></div></div>

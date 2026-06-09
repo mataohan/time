@@ -645,7 +645,7 @@ app.post('/api/expenses', authMiddleware, async (req, res) => {
   }
   const amt = parseFloat(amount);
   if (isNaN(amt) || amt <= 0) return res.status(400).json({ error: '金额必须为正数' });
-  if (!['餐饮', '购物', '交通', '娱乐', '医疗', '其他'].includes(category)) {
+  if (!['餐饮', '购物', '交通', '娱乐', '医疗', '其他', '爱车', '路费'].includes(category)) {
     return res.status(400).json({ error: '无效的分类' });
   }
 
