@@ -394,17 +394,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;bottom:0;background:
 }
 
 /* ========== 手机端账单查询卡片式布局 ========== */
-@media(max-width:768px){
-  /* 隐藏表格 */
-  .report-table{display:none}
-  /* 显示卡片列表 */
-  .report-card-list{display:flex;flex-direction:column;gap:12px}
-}
-@media(min-width:769px){
-  /* 桌面端隐藏卡片列表 */
-  .report-card-list{display:none}
-}
-
+/* 基础样式：默认隐藏卡片（桌面端由 min-width:769px 覆盖） */
 .report-card-list{display:none}
 .report-card-item{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px;transition:var(--transition);display:flex;flex-direction:column;gap:10px}
 .report-card-item:hover{border-color:var(--border-accent);box-shadow:0 4px 16px rgba(0,0,0,0.25)}
@@ -418,6 +408,18 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;bottom:0;background:
 .report-card-actions .btn-task-edit:hover{border-color:var(--accent);color:var(--accent);background:rgba(79,195,247,0.06)}
 .report-card-actions .btn-task-del:hover{border-color:var(--danger);color:var(--danger);background:rgba(239,83,80,0.06)}
 .report-card-empty{text-align:center;padding:40px 20px;color:var(--text-muted);font-size:16px;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius)}
+
+/* 手机端：显示卡片，隐藏表格 */
+@media(max-width:768px){
+  .report-table{display:none}
+  .report-card-list{display:flex;flex-direction:column;gap:12px}
+}
+
+/* 桌面端：显示表格，隐藏卡片 */
+@media(min-width:769px){
+  .report-table{display:table}
+  .report-card-list{display:none}
+}
 
 /* ========== 平板适配 ≤1024px ========== */
 @media(max-width:1024px){
