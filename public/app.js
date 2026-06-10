@@ -1900,28 +1900,55 @@ async function loadExpenseReport() {
 
 function renderReportTable() {
   var tbody = document.getElementById('rptTableBody');
-  if (!tbody) return;
+  var cardList = document.getElementById('rptCardList');
 
+  // 空数据处理
   if (reportCache.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="5" class="report-empty">没有符合条件的记账记录</td></tr>';
+    if (tbody) tbody.innerHTML = '<tr><td colspan="5" class="report-empty">没有符合条件的记账记录</td></tr>';
+    if (cardList) cardList.innerHTML = '<div class="report-card-empty">没有符合条件的记账记录</div>';
     return;
   }
 
-  var html = '';
-  for (var i = 0; i < reportCache.length; i++) {
-    var e = reportCache[i];
-    html += '<tr>';
-    html += '<td class="report-td-date">' + esc(e.expense_date) + '</td>';
-    html += '<td><span class="expense-cat expense-cat-' + EXP_CSS[e.category] + '">' + EXP_EMOJI[e.category] + ' ' + e.category + '</span></td>';
-    html += '<td class="report-td-amount">¥ ' + Number(e.amount).toFixed(2) + '</td>';
-    html += '<td class="report-td-note">' + (e.note ? esc(e.note) : '—') + '</td>';
-    html += '<td class="report-td-actions">';
-    html += '<button class="btn-task-edit" onclick="openExpenseModal(\'' + e.id + '\')" title="编辑">✏️</button>';
-    html += '<button class="btn-task-del" onclick="deleteReportExpense(\'' + e.id + '\')" title="删除">🗑️</button>';
-    html += '</td>';
-    html += '</tr>';
+  // 渲染表格（桌面端）
+  if (tbody) {
+    var html = '';
+    for (var i = 0; i < reportCache.length; i++) {
+      var e = reportCache[i];
+      html += '<tr>';
+      html += '<td class="report-td-date">' + esc(e.expense_date) + '</td>';
+      html += '<td><span class="expense-cat expense-cat-' + EXP_CSS[e.category] + '">' + EXP_EMOJI[e.category] + ' ' + e.category + '</span></td>';
+      html += '<td class="report-td-amount">¥ ' + Number(e.amount).toFixed(2) + '</td>';
+      html += '<td class="report-td-note">' + (e.note ? esc(e.note) : '—') + '</td>';
+      html += '<td class="report-td-actions">';
+      html += '<button class="btn-task-edit" onclick="openExpenseModal(\'' + e.id + '\')" title="编辑">✏️</button>';
+      html += '<button class="btn-task-del" onclick="deleteReportExpense(\'' + e.id + '\')" title="删除">🗑️</button>';
+      html += '</td>';
+      html += '</tr>';
+    }
+    tbody.innerHTML = html;
   }
-  tbody.innerHTML = html;
+
+  // 渲染卡片列表（手机端，备注完整显示）
+  if (cardList) {
+    var cards = '';
+    for (var j = 0; j < reportCache.length; j++) {
+      var r = reportCache[j];
+      var noteContent = r.note ? esc(r.note) : '';
+      cards += '<div class="report-card-item">';
+      cards += '<div class="report-card-row">';
+      cards += '<span class="report-card-date">' + esc(r.expense_date) + '</span>';
+      cards += '<span class="expense-cat expense-cat-' + EXP_CSS[r.category] + '">' + EXP_EMOJI[r.category] + ' ' + r.category + '</span>';
+      cards += '<span class="report-card-amount">¥ ' + Number(r.amount).toFixed(2) + '</span>';
+      cards += '</div>';
+      cards += '<div class="report-card-note">' + (noteContent || '<span class="report-card-note-empty">暂无备注</span>') + '</div>';
+      cards += '<div class="report-card-actions">';
+      cards += '<button class="btn-task-edit" onclick="openExpenseModal(\'' + r.id + '\')">✏️ 编辑</button>';
+      cards += '<button class="btn-task-del" onclick="deleteReportExpense(\'' + r.id + '\')">🗑️ 删除</button>';
+      cards += '</div>';
+      cards += '</div>';
+    }
+    cardList.innerHTML = cards;
+  }
 }
 
 async function deleteReportExpense(id) {
