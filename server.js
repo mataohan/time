@@ -614,12 +614,11 @@ app.patch('/api/tasks/:id/toggle', authMiddleware, async (req, res) => {
 
 // 获取消费记录（使用 YEAR/MONTH 函数精确筛选，避免字符串拼接日期边界问题）
 app.get('/api/expenses', authMiddleware, async (req, res) => {
-  const { year, month, category } = req.query;
+  const { year, month, category, keyword, minAmount, maxAmount } = req.query;
   let sql = 'SELECT * FROM expenses WHERE user_id = ?';
   const params = [req.userId];
 
   if (year && month) {
-    // 使用 YEAR() 和 MONTH() 函数，精准匹配，不受日期边界影响
     sql += ' AND YEAR(expense_date) = ? AND MONTH(expense_date) = ?';
     params.push(parseInt(year), parseInt(month));
   } else if (year) {
@@ -632,10 +631,27 @@ app.get('/api/expenses', authMiddleware, async (req, res) => {
     params.push(category);
   }
 
+  // 关键字模糊搜索：备注和分类
+  if (keyword && keyword.trim()) {
+    const kw = '%' + keyword.trim() + '%';
+    sql += ' AND (note LIKE ? OR category LIKE ?)';
+    params.push(kw, kw);
+  }
+
+  // 金额区间筛选
+  if (minAmount !== undefined && minAmount !== '') {
+    sql += ' AND amount >= ?';
+    params.push(parseFloat(minAmount));
+  }
+  if (maxAmount !== undefined && maxAmount !== '') {
+    sql += ' AND amount <= ?';
+    params.push(parseFloat(maxAmount));
+  }
+
   sql += ' ORDER BY expense_date DESC, created_at DESC';
 
-  // 调试日志：打印查询参数和 SQL
-  console.log(`[API] 接收参数: year=${year}, month=${month}, category=${category || '无'}`);
+  // 调试日志
+  console.log(`[API] 接收参数: year=${year}, month=${month}, category=${category || '无'}, keyword=${keyword || '无'}, minAmount=${minAmount || '无'}, maxAmount=${maxAmount || '无'}`);
   console.log(`[API] SQL: ${sql}, params: [${params.join(', ')}]`);
 
   const expenses = await db.all(sql, params);
@@ -650,7 +666,7 @@ app.post('/api/expenses', authMiddleware, async (req, res) => {
   }
   const amt = parseFloat(amount);
   if (isNaN(amt) || amt <= 0) return res.status(400).json({ error: '金额必须为正数' });
-  if (!['餐饮', '购物', '交通', '娱乐', '医疗', '其他', '爱车', '路费'].includes(category)) {
+  if (!['餐饮', '购物', '交通', '娱乐', '医疗', '其他', '爱车', '路费', '住宿'].includes(category)) {
     return res.status(400).json({ error: '无效的分类' });
   }
 
@@ -693,7 +709,7 @@ app.delete('/api/expenses/:id', authMiddleware, async (req, res) => {
 
 // 记账统计：返回年总额、月总额、分类汇总
 app.get('/api/expenses/stats', authMiddleware, async (req, res) => {
-  const { year, month, category } = req.query;
+  const { year, month, category, keyword, minAmount, maxAmount } = req.query;
   const y = parseInt(year);
   const m = parseInt(month);
 
@@ -702,26 +718,46 @@ app.get('/api/expenses/stats', authMiddleware, async (req, res) => {
   }
 
   const catFilter = (category && category !== 'all') ? category : null;
-  console.log(`[API] 接收参数: year=${y}, month=${m}, category=${catFilter || '无'}`);
+  console.log(`[API] 接收参数: year=${y}, month=${m}, category=${catFilter || '无'}, keyword=${keyword || '无'}, minAmount=${minAmount || '无'}, maxAmount=${maxAmount || '无'}`);
 
-  // 构建 category 条件 SQL 片段
-  const catSql = catFilter ? ' AND category = ?' : '';
-  const catParam = catFilter ? [catFilter] : [];
+  // 构建额外筛选条件
+  let extraSql = '';
+  const extraParams = [];
+
+  if (catFilter) {
+    extraSql += ' AND category = ?';
+    extraParams.push(catFilter);
+  }
+
+  if (keyword && keyword.trim()) {
+    const kw = '%' + keyword.trim() + '%';
+    extraSql += ' AND (note LIKE ? OR category LIKE ?)';
+    extraParams.push(kw, kw);
+  }
+
+  if (minAmount !== undefined && minAmount !== '') {
+    extraSql += ' AND amount >= ?';
+    extraParams.push(parseFloat(minAmount));
+  }
+  if (maxAmount !== undefined && maxAmount !== '') {
+    extraSql += ' AND amount <= ?';
+    extraParams.push(parseFloat(maxAmount));
+  }
 
   // 年总额
   const yearRow = await db.get(
-    'SELECT COALESCE(SUM(amount), 0) AS total FROM expenses WHERE user_id = ? AND YEAR(expense_date) = ?' + catSql,
-    [req.userId, y, ...catParam]
+    'SELECT COALESCE(SUM(amount), 0) AS total FROM expenses WHERE user_id = ? AND YEAR(expense_date) = ?' + extraSql,
+    [req.userId, y, ...extraParams]
   );
   // 月总额
   const monthRow = await db.get(
-    'SELECT COALESCE(SUM(amount), 0) AS total FROM expenses WHERE user_id = ? AND YEAR(expense_date) = ? AND MONTH(expense_date) = ?' + catSql,
-    [req.userId, y, m, ...catParam]
+    'SELECT COALESCE(SUM(amount), 0) AS total FROM expenses WHERE user_id = ? AND YEAR(expense_date) = ? AND MONTH(expense_date) = ?' + extraSql,
+    [req.userId, y, m, ...extraParams]
   );
   // 分类汇总
   const catRows = await db.all(
-    'SELECT category, COALESCE(SUM(amount), 0) AS total FROM expenses WHERE user_id = ? AND YEAR(expense_date) = ? AND MONTH(expense_date) = ?' + catSql + ' GROUP BY category',
-    [req.userId, y, m, ...catParam]
+    'SELECT category, COALESCE(SUM(amount), 0) AS total FROM expenses WHERE user_id = ? AND YEAR(expense_date) = ? AND MONTH(expense_date) = ?' + extraSql + ' GROUP BY category',
+    [req.userId, y, m, ...extraParams]
   );
 
   const categories = {};

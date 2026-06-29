@@ -167,9 +167,12 @@ const API = {
   createExpense: (b) => API.post('/api/expenses', b),
   updateExpense: (id, b) => API.put('/api/expenses/' + id, b),
   deleteExpense: (id) => API.del('/api/expenses/' + id),
-  getExpenseStats: (year, month, category) => {
+  getExpenseStats: (year, month, category, keyword, minAmount, maxAmount) => {
     var url = '/api/expenses/stats?year=' + year + '&month=' + month;
     if (category && category !== 'all') url += '&category=' + encodeURIComponent(category);
+    if (keyword) url += '&keyword=' + encodeURIComponent(keyword);
+    if (minAmount) url += '&minAmount=' + encodeURIComponent(minAmount);
+    if (maxAmount) url += '&maxAmount=' + encodeURIComponent(maxAmount);
     return API.get(url);
   },
 
@@ -1858,6 +1861,9 @@ function resetReportFilter() {
   document.getElementById('rptYear').value = now.getFullYear();
   document.getElementById('rptMonth').value = now.getMonth() + 1;
   document.getElementById('rptCat').value = 'all';
+  document.getElementById('rptKeyword').value = '';
+  document.getElementById('rptMinAmount').value = '';
+  document.getElementById('rptMaxAmount').value = '';
   loadExpenseReport();
 }
 
@@ -1865,18 +1871,27 @@ async function loadExpenseReport() {
   var yEl = document.getElementById('rptYear');
   var mEl = document.getElementById('rptMonth');
   var cEl = document.getElementById('rptCat');
+  var kwEl = document.getElementById('rptKeyword');
+  var minEl = document.getElementById('rptMinAmount');
+  var maxEl = document.getElementById('rptMaxAmount');
   var year = parseInt(yEl.value);
   var month = parseInt(mEl.value);
   var cat = cEl ? (cEl.value || 'all') : 'all';
+  var keyword = kwEl ? (kwEl.value || '').trim() : '';
+  var minAmount = minEl ? minEl.value : '';
+  var maxAmount = maxEl ? maxEl.value : '';
 
   try {
     // 并行请求明细和统计
     var params = { year: year, month: month };
     if (cat && cat !== 'all') params.category = cat;
+    if (keyword) params.keyword = keyword;
+    if (minAmount) params.minAmount = minAmount;
+    if (maxAmount) params.maxAmount = maxAmount;
 
     var [expResult, stats] = await Promise.all([
       API.getExpenses(params),
-      API.getExpenseStats(year, month, cat)
+      API.getExpenseStats(year, month, cat, keyword, minAmount, maxAmount)
     ]);
 
     reportCache = (expResult.expenses || []).map(function(e) {

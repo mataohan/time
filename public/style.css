@@ -353,6 +353,11 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;bottom:0;background:
 .report-filter-label{font-size:16px;font-weight:600;color:var(--accent);white-space:nowrap}
 .report-filter-bar select{padding:10px 16px;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text-primary);font-size:15px;cursor:pointer;outline:none;min-height:44px;transition:var(--transition)}
 .report-filter-bar select:focus{border-color:var(--accent)}
+.report-filter-input{padding:10px 16px;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text-primary);font-size:15px;outline:none;min-height:44px;transition:var(--transition);max-width:180px}
+.report-filter-input:focus{border-color:var(--accent)}
+.report-filter-input::placeholder{color:var(--text-muted);font-size:14px}
+.report-filter-amount{max-width:130px;-moz-appearance:textfield}
+.report-filter-amount::-webkit-outer-spin-button,.report-filter-amount::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
 
 .report-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
 .report-stat-card{background:linear-gradient(135deg,rgba(79,195,247,0.08),rgba(124,77,255,0.06));border:1px solid var(--border);border-radius:var(--radius);padding:24px 28px;text-align:center;transition:var(--transition)}
@@ -392,6 +397,8 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;bottom:0;background:
   .report-filter-bar{gap:6px}
   .report-filter-label{font-size:14px}
   .report-filter-bar select{padding:8px 10px;font-size:14px;min-height:40px}
+  .report-filter-input{padding:8px 10px;font-size:14px;min-height:40px;max-width:100%;width:100%}
+  .report-filter-amount{max-width:calc(50% - 3px)}
 }
 
 /* ========== 手机端账单查询卡片式布局 ========== */
