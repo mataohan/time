@@ -207,9 +207,9 @@ const CAT_TC_ID = { 健身: 'tcFitness', 影视: 'tcMovie', 学习: 'tcStudy', �
 const MOODS = { '好': '😊', '一般': '😐', '差': '😞' };
 const MOOD_CSS = { '好': 'mood-good', '一般': 'mood-ok', '差': 'mood-bad' };
 
-const EXP_CATS = ['餐饮', '购物', '交通', '娱乐', '医疗', '其他', '爱车', '路费'];
-const EXP_EMOJI = { 餐饮: '🍜', 购物: '🛒', 交通: '🚗', 娱乐: '🎮', 医疗: '🏥', 其他: '📦', 爱车: '🚘', 路费: '🛣️' };
-const EXP_CSS = { 餐饮: 'dining', 购物: 'shopping', 交通: 'transport', 娱乐: 'entertainment', 医疗: 'medical', 其他: 'other', 爱车: 'car', 路费: 'toll' };
+const EXP_CATS = ['餐饮', '购物', '交通', '娱乐', '医疗', '其他', '爱车', '住宿'];
+const EXP_EMOJI = { 餐饮: '🍜', 购物: '🛒', 交通: '🚗', 娱乐: '🎮', 医疗: '🏥', 其他: '📦', 爱车: '🚘', 路费: '🛣️', 住宿: '🏨' };
+const EXP_CSS = { 餐饮: 'dining', 购物: 'shopping', 交通: 'transport', 娱乐: 'entertainment', 医疗: 'medical', 其他: 'other', 爱车: 'car', 路费: 'toll', 住宿: 'lodging' };
 
 let expYear, expMonth, expSelectedDate, expFilterCat = 'all', expensesCache = [];
 

@@ -334,6 +334,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;bottom:0;background:
 .expense-cat-other{background:rgba(129,212,250,0.15);color:#81d4fa}
 .expense-cat-car{background:rgba(244,67,54,0.15);color:#f44336}
 .expense-cat-toll{background:rgba(158,158,158,0.15);color:#bdbdbd}
+.expense-cat-lodging{background:rgba(161,136,127,0.15);color:#a1887f}
 .expense-amount{font-size:20px;font-weight:700;color:var(--text-primary);margin-left:auto;white-space:nowrap}
 .expense-note{width:100%;font-size:14px;color:var(--text-muted);padding-left:4px;margin-top:2px}
 .expense-actions{display:flex;gap:4px;flex-shrink:0}
@@ -344,7 +345,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;bottom:0;background:
 /* Expense calendar dots */
 .exp-dot-dining{background:#ff9800}.exp-dot-shopping{background:#ba68c8}.exp-dot-transport{background:#4dd0e1}
 .exp-dot-entertainment{background:#4caf50}.exp-dot-medical{background:#ef5350}.exp-dot-other{background:#81d4fa}
-.exp-dot-car{background:#f44336}.exp-dot-toll{background:#9e9e9e}
+.exp-dot-car{background:#f44336}.exp-dot-toll{background:#9e9e9e}.exp-dot-lodging{background:#a1887f}
 
 /* ========== 账单查询板块 ========== */
 .report-section{display:flex;flex-direction:column;gap:20px}
