@@ -154,6 +154,20 @@ async function initDB() {
     )
   `);
 
+  // v2.4 箍牙提醒功能：创建 orthodontic_records 表
+  await db.exec(`
+    CREATE TABLE IF NOT EXISTS orthodontic_records (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      user_id INT NOT NULL,
+      start_date DATE NOT NULL,
+      tray_number INT NOT NULL DEFAULT 1,
+      change_interval INT NOT NULL DEFAULT 14,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `);
+
   console.log('✅ TiDB Cloud 表初始化完成');
 }
 
@@ -770,6 +784,133 @@ app.get('/api/expenses/stats', authMiddleware, async (req, res) => {
     monthTotal: monthRow.total,
     categories
   });
+});
+
+// ========== 箍牙提醒路由 ==========
+
+// 获取当前用户的箍牙记录（返回最新一条）
+app.get('/api/orthodontic', authMiddleware, async (req, res) => {
+  const record = await db.get(
+    'SELECT * FROM orthodontic_records WHERE user_id = ? ORDER BY id DESC LIMIT 1',
+    [req.userId]
+  );
+  if (!record) {
+    return res.json({ record: null });
+  }
+  // 返回记录 + 计算下次换牙套日期
+  const startDate = new Date(record.start_date);
+  const nextDate = new Date(startDate);
+  nextDate.setDate(nextDate.getDate() + record.change_interval);
+
+  // 计算距今已佩戴天数和剩余天数
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const startDay = new Date(record.start_date);
+  startDay.setHours(0, 0, 0, 0);
+  const daysWorn = Math.floor((today - startDay) / (1000 * 60 * 60 * 24));
+  const daysLeft = Math.max(0, Math.ceil((nextDate - today) / (1000 * 60 * 60 * 24)));
+
+  // 判断是否过期
+  const isOverdue = daysLeft === 0 && daysWorn >= record.change_interval;
+
+  res.json({
+    record: {
+      ...record,
+      next_change_date: nextDate.toISOString().substring(0, 10),
+      days_worn: daysWorn,
+      days_left: daysLeft,
+      is_overdue: isOverdue
+    }
+  });
+});
+
+// 创建或更新箍牙记录
+app.post('/api/orthodontic', authMiddleware, async (req, res) => {
+  const { start_date, tray_number, change_interval } = req.body;
+  if (!start_date) {
+    return res.status(400).json({ error: '佩戴开始日期不能为空' });
+  }
+  const safeDate = String(start_date).substring(0, 10);
+  const trayNum = parseInt(tray_number) || 1;
+  const interval = parseInt(change_interval) || 14;
+
+  // 检查是否已有记录
+  const existing = await db.get(
+    'SELECT * FROM orthodontic_records WHERE user_id = ? ORDER BY id DESC LIMIT 1',
+    [req.userId]
+  );
+
+  let record;
+  if (existing) {
+    await db.run(
+      'UPDATE orthodontic_records SET start_date = ?, tray_number = ?, change_interval = ? WHERE id = ? AND user_id = ?',
+      [safeDate, trayNum, interval, existing.id, req.userId]
+    );
+    record = await db.get('SELECT * FROM orthodontic_records WHERE id = ?', [existing.id]);
+  } else {
+    record = await db.insert(
+      'INSERT INTO orthodontic_records (user_id, start_date, tray_number, change_interval) VALUES (?, ?, ?, ?)',
+      [req.userId, safeDate, trayNum, interval]
+    );
+  }
+
+  // 计算下次换牙套日期
+  const startDate2 = new Date(record.start_date);
+  const nextDate = new Date(startDate2);
+  nextDate.setDate(nextDate.getDate() + record.change_interval);
+
+  res.json({
+    message: existing ? '更新成功' : '创建成功',
+    record: {
+      ...record,
+      next_change_date: nextDate.toISOString().substring(0, 10)
+    }
+  });
+});
+
+// 更新箍牙记录
+app.put('/api/orthodontic', authMiddleware, async (req, res) => {
+  const existing = await db.get(
+    'SELECT * FROM orthodontic_records WHERE user_id = ? ORDER BY id DESC LIMIT 1',
+    [req.userId]
+  );
+  if (!existing) {
+    return res.status(404).json({ error: '暂无箍牙记录' });
+  }
+
+  const { start_date, tray_number, change_interval } = req.body;
+  const safeDate = start_date ? String(start_date).substring(0, 10) : existing.start_date;
+  const trayNum = tray_number !== undefined ? parseInt(tray_number) : existing.tray_number;
+  const interval = change_interval !== undefined ? parseInt(change_interval) : existing.change_interval;
+
+  await db.run(
+    'UPDATE orthodontic_records SET start_date = ?, tray_number = ?, change_interval = ? WHERE id = ? AND user_id = ?',
+    [safeDate, trayNum, interval, existing.id, req.userId]
+  );
+
+  const record = await db.get('SELECT * FROM orthodontic_records WHERE id = ?', [existing.id]);
+
+  const startDate2 = new Date(record.start_date);
+  const nextDate = new Date(startDate2);
+  nextDate.setDate(nextDate.getDate() + record.change_interval);
+
+  res.json({
+    message: '更新成功',
+    record: {
+      ...record,
+      next_change_date: nextDate.toISOString().substring(0, 10)
+    }
+  });
+});
+
+// 删除箍牙记录
+app.delete('/api/orthodontic', authMiddleware, async (req, res) => {
+  const changes = await db.change(
+    'DELETE FROM orthodontic_records WHERE user_id = ?',
+    [req.userId]
+  );
+  if (changes === 0) return res.status(404).json({ error: '暂无箍牙记录可删除' });
+  res.json({ message: '删除成功' });
 });
 
 // ========== 宠物档案路由 ==========

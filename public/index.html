@@ -39,6 +39,7 @@
     <button class="tab-btn" onclick="switchTab('report')">📊 账单查询</button>
     <button class="tab-btn" onclick="switchTab('pets')">🐱 宠物档案</button>
     <button class="tab-btn" onclick="switchTab('fitness')">🏋️ 健身计划</button>
+    <button class="tab-btn" onclick="switchTab('orthodontic')">🦷 箍牙提醒</button>
   </div>
   <div class="content-area">
 
@@ -249,6 +250,78 @@
             <div class="fitness-motto-refresh" onclick="refreshFitnessMotto()">🔄 换一句</div>
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- 箍牙提醒板块 -->
+    <div id="orthodonticTab" class="ortho-section" style="display:none;">
+      <!-- 提醒横幅 -->
+      <div class="ortho-alert-banner" id="orthoAlertBanner" style="display:none;">
+        <div class="ortho-alert-content">
+          <span class="ortho-alert-icon" id="orthoAlertIcon">🦷</span>
+          <span class="ortho-alert-text" id="orthoAlertText"></span>
+        </div>
+        <button class="ortho-alert-btn" onclick="openChangeTrayModal()">我已更换</button>
+      </div>
+
+      <!-- 顶部统计卡片 -->
+      <div class="ortho-stats" id="orthoStats">
+        <div class="ortho-stat-card">
+          <div class="ortho-stat-icon">🦷</div>
+          <div class="ortho-stat-info">
+            <div class="ortho-stat-label">当前牙套</div>
+            <div class="ortho-stat-value" id="orthoTrayNum">—</div>
+          </div>
+        </div>
+        <div class="ortho-stat-card">
+          <div class="ortho-stat-icon">📆</div>
+          <div class="ortho-stat-info">
+            <div class="ortho-stat-label">已佩戴</div>
+            <div class="ortho-stat-value" id="orthoDaysWorn">—</div>
+          </div>
+        </div>
+        <div class="ortho-stat-card">
+          <div class="ortho-stat-icon">⏳</div>
+          <div class="ortho-stat-info">
+            <div class="ortho-stat-label">距下次更换</div>
+            <div class="ortho-stat-value" id="orthoDaysLeft">—</div>
+          </div>
+        </div>
+        <div class="ortho-stat-card">
+          <div class="ortho-stat-icon">📅</div>
+          <div class="ortho-stat-info">
+            <div class="ortho-stat-label">下次更换日期</div>
+            <div class="ortho-stat-value" id="orthoNextDate">—</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 空状态 -->
+      <div class="ortho-empty" id="orthoEmpty" style="display:none;">
+        <div class="empty-icon">🦷</div>
+        <p>暂无箍牙记录</p>
+        <p class="ortho-empty-sub">点击下方按钮开始记录牙套更换</p>
+      </div>
+
+      <!-- 操作按钮 -->
+      <div class="ortho-actions">
+        <button class="btn-ortho-primary" onclick="openChangeTrayModal()">🦷 我换新牙套了</button>
+        <button class="btn-ortho-secondary" onclick="openEditIntervalModal()">⚙️ 修改间隔天数</button>
+        <button class="btn-ortho-danger" onclick="deleteOrthoRecord()">🗑️ 删除记录</button>
+      </div>
+
+      <!-- 日历视图 -->
+      <div class="ortho-calendar" id="orthoCalendarWrap">
+        <div class="ortho-calendar-header">
+          <h2>📅 换牙套日历</h2>
+          <div class="ortho-calendar-nav">
+            <button onclick="orthoPrevMonth()">◀</button>
+            <span class="ortho-calendar-title" id="orthoCalendarTitle"></span>
+            <button onclick="orthoNextMonth()">▶</button>
+            <button class="btn-today" onclick="orthoGoToToday()">今天</button>
+          </div>
+        </div>
+        <div class="ortho-calendar-grid" id="orthoCalendarGrid"></div>
       </div>
     </div>
   </div>

@@ -185,7 +185,13 @@ const API = {
   getHealthEvents: (petId) => API.get('/api/pets/' + petId + '/events'),
   createHealthEvent: (petId, b) => API.post('/api/pets/' + petId + '/events', b),
   updateHealthEvent: (petId, eventId, b) => API.put('/api/pets/' + petId + '/events/' + eventId, b),
-  deleteHealthEvent: (petId, eventId) => API.del('/api/pets/' + petId + '/events/' + eventId)
+  deleteHealthEvent: (petId, eventId) => API.del('/api/pets/' + petId + '/events/' + eventId),
+
+  // ---- 箍牙提醒 ----
+  getOrthodontic: () => API.get('/api/orthodontic'),
+  createOrthodontic: (b) => API.post('/api/orthodontic', b),
+  updateOrthodontic: (b) => API.put('/api/orthodontic', b),
+  deleteOrthodontic: () => API.del('/api/orthodontic')
 };
 
 // ==================== 全局状态 ====================
@@ -215,6 +221,11 @@ const EXP_EMOJI = { 餐饮: '🍜', 购物: '🛒', 交通: '🚗', 娱乐: '�
 const EXP_CSS = { 餐饮: 'dining', 购物: 'shopping', 交通: 'transport', 娱乐: 'entertainment', 医疗: 'medical', 其他: 'other', 爱车: 'car', 路费: 'toll', 住宿: 'lodging' };
 
 let expYear, expMonth, expSelectedDate, expFilterCat = 'all', expensesCache = [];
+
+// 箍牙提醒相关变量
+let orthoRecord = null;
+let orthoCalendarYear, orthoCalendarMonth;
+let orthoChangeDates = []; // 所有换牙套日期列表
 
 const HEALTH_EVENT_TYPES = [
   { key: 'vaccine', label: '疫苗', emoji: '💉', css: 'vaccine' },
@@ -403,6 +414,8 @@ function showApp() {
   switchTab('calendar');
   // 后台预加载待办事项，初始化角标数字
   loadTasks();
+  // 启动时检查箍牙提醒
+  checkOrthoReminderOnStart();
 }
 
 // ==================== 标签切换 ====================
@@ -418,6 +431,7 @@ function switchTab(tab) {
     document.getElementById('reportTab').style.display = 'none';
     document.getElementById('petsTab').style.display = 'none';
     document.getElementById('fitnessTab').style.display = 'none';
+    document.getElementById('orthodonticTab').style.display = 'none';
     loadDiaries();
   } else if (tab === 'tasks') {
     btns[1].classList.add('active');
@@ -427,6 +441,7 @@ function switchTab(tab) {
     document.getElementById('reportTab').style.display = 'none';
     document.getElementById('petsTab').style.display = 'none';
     document.getElementById('fitnessTab').style.display = 'none';
+    document.getElementById('orthodonticTab').style.display = 'none';
     loadTasks();
   } else if (tab === 'expenses') {
     btns[2].classList.add('active');
@@ -435,6 +450,7 @@ function switchTab(tab) {
     document.getElementById('reportTab').style.display = 'none';
     document.getElementById('petsTab').style.display = 'none';
     document.getElementById('fitnessTab').style.display = 'none';
+    document.getElementById('orthodonticTab').style.display = 'none';
     document.getElementById('expensesTab').style.display = 'block';
     initExpenses();
   } else if (tab === 'report') {
@@ -444,6 +460,7 @@ function switchTab(tab) {
     document.getElementById('expensesTab').style.display = 'none';
     document.getElementById('petsTab').style.display = 'none';
     document.getElementById('fitnessTab').style.display = 'none';
+    document.getElementById('orthodonticTab').style.display = 'none';
     document.getElementById('reportTab').style.display = 'block';
     initExpenseReport();
   } else if (tab === 'pets') {
@@ -453,6 +470,7 @@ function switchTab(tab) {
     document.getElementById('expensesTab').style.display = 'none';
     document.getElementById('reportTab').style.display = 'none';
     document.getElementById('fitnessTab').style.display = 'none';
+    document.getElementById('orthodonticTab').style.display = 'none';
     document.getElementById('petsTab').style.display = 'block';
     loadPets();
   } else if (tab === 'fitness') {
@@ -462,8 +480,19 @@ function switchTab(tab) {
     document.getElementById('expensesTab').style.display = 'none';
     document.getElementById('reportTab').style.display = 'none';
     document.getElementById('petsTab').style.display = 'none';
+    document.getElementById('orthodonticTab').style.display = 'none';
     document.getElementById('fitnessTab').style.display = 'block';
     initFitness();
+  } else if (tab === 'orthodontic') {
+    btns[6].classList.add('active');
+    document.getElementById('calendarTab').style.display = 'none';
+    document.getElementById('tasksTab').style.display = 'none';
+    document.getElementById('expensesTab').style.display = 'none';
+    document.getElementById('reportTab').style.display = 'none';
+    document.getElementById('petsTab').style.display = 'none';
+    document.getElementById('fitnessTab').style.display = 'none';
+    document.getElementById('orthodonticTab').style.display = 'block';
+    initOrthodontic();
   }
 }
 
@@ -2602,3 +2631,312 @@ async function debugToken() {
     console.log('[INIT] 未登录，显示登录页');
   }
 })();
+
+// ==================== 箍牙提醒板块 ====================
+
+// 初始化箍牙板块
+async function initOrthodontic() {
+  var now = new Date();
+  orthoCalendarYear = now.getFullYear();
+  orthoCalendarMonth = now.getMonth() + 1;
+  await loadOrthoData();
+}
+
+// 加载箍牙数据
+async function loadOrthoData() {
+  try {
+    var result = await API.getOrthodontic();
+    orthoRecord = result.record;
+
+    if (orthoRecord) {
+      // 计算换牙套日期列表
+      calcOrthoChangeDates();
+      // 渲染统计卡片
+      renderOrthoStats();
+      // 渲染日历
+      renderOrthoCalendar();
+      // 显示/隐藏空状态
+      document.getElementById('orthoEmpty').style.display = 'none';
+      document.getElementById('orthoStats').style.display = 'flex';
+      document.getElementById('orthoCalendarWrap').style.display = 'block';
+      // 检查提醒
+      checkOrthoAlert();
+    } else {
+      orthoRecord = null;
+      orthoChangeDates = [];
+      document.getElementById('orthoStats').style.display = 'none';
+      document.getElementById('orthoCalendarWrap').style.display = 'none';
+      document.getElementById('orthoEmpty').style.display = 'block';
+      document.getElementById('orthoAlertBanner').style.display = 'none';
+    }
+  } catch (err) {
+    toast('加载箍牙数据失败: ' + err.message, 'error');
+  }
+}
+
+// 计算所有换牙套日期（从 start_date 开始，每 change_interval 天一个，推算到未来 2 年）
+function calcOrthoChangeDates() {
+  if (!orthoRecord) { orthoChangeDates = []; return; }
+  var start = new Date(orthoRecord.start_date);
+  start.setHours(0, 0, 0, 0);
+  var interval = orthoRecord.change_interval || 14;
+  var end = new Date(start);
+  end.setFullYear(end.getFullYear() + 2); // 推算到未来 2 年
+  orthoChangeDates = [];
+  var current = new Date(start);
+  var trayNum = orthoRecord.tray_number || 1;
+  while (current <= end) {
+    orthoChangeDates.push({
+      date: formatDate(current),
+      trayNumber: trayNum
+    });
+    current.setDate(current.getDate() + interval);
+    trayNum++;
+  }
+}
+
+// 格式化日期为 YYYY-MM-DD
+function formatDate(d) {
+  var y = d.getFullYear();
+  var m = String(d.getMonth() + 1).padStart(2, '0');
+  var day = String(d.getDate()).padStart(2, '0');
+  return y + '-' + m + '-' + day;
+}
+
+// 渲染统计卡片
+function renderOrthoStats() {
+  if (!orthoRecord) return;
+  var daysWorn = orthoRecord.days_worn;
+  var daysLeft = orthoRecord.days_left;
+  var isOverdue = orthoRecord.is_overdue;
+  var nextDate = orthoRecord.next_change_date;
+
+  // 格式化下次更换日期
+  var nextParts = nextDate.split('-');
+  var nextStr = nextParts[0] + '年' + parseInt(nextParts[1]) + '月' + parseInt(nextParts[2]) + '日';
+
+  document.getElementById('orthoTrayNum').textContent = '第 ' + orthoRecord.tray_number + ' 副';
+  document.getElementById('orthoDaysWorn').textContent = daysWorn + ' 天';
+  if (isOverdue) {
+    document.getElementById('orthoDaysLeft').textContent = '已超 ' + (daysWorn - orthoRecord.change_interval) + ' 天 ⚠️';
+    document.getElementById('orthoDaysLeft').style.color = '#ef5350';
+  } else {
+    document.getElementById('orthoDaysLeft').textContent = daysLeft + ' 天';
+    document.getElementById('orthoDaysLeft').style.color = '';
+  }
+  document.getElementById('orthoNextDate').textContent = nextStr;
+}
+
+// 渲染箍牙日历
+function renderOrthoCalendar() {
+  var grid = document.getElementById('orthoCalendarGrid');
+  var title = document.getElementById('orthoCalendarTitle');
+  if (!grid) return;
+
+  title.textContent = orthoCalendarYear + '年 ' + orthoCalendarMonth + '月';
+
+  var firstDay = new Date(orthoCalendarYear, orthoCalendarMonth - 1, 1);
+  var lastDay = new Date(orthoCalendarYear, orthoCalendarMonth, 0);
+  var totalDays = lastDay.getDate();
+  var startDow = firstDay.getDay(); // 0=周日
+
+  // 构建换牙套日期映射（用于快速查找）
+  var changeDateMap = {};
+  for (var i = 0; i < orthoChangeDates.length; i++) {
+    changeDateMap[orthoChangeDates[i].date] = orthoChangeDates[i].trayNumber;
+  }
+
+  var todayStr = formatDate(new Date());
+
+  var html = '<div class="ortho-weekday">日</div><div class="ortho-weekday">一</div><div class="ortho-weekday">二</div><div class="ortho-weekday">三</div><div class="ortho-weekday">四</div><div class="ortho-weekday">五</div><div class="ortho-weekday">六</div>';
+
+  // 空白格
+  for (var j = 0; j < startDow; j++) {
+    html += '<div class="ortho-day ortho-day-empty"></div>';
+  }
+
+  // 日期格
+  for (var d = 1; d <= totalDays; d++) {
+    var dateStr = orthoCalendarYear + '-' + String(orthoCalendarMonth).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+    var isToday = (dateStr === todayStr);
+    var trayNum = changeDateMap[dateStr];
+    var isChangeDay = (trayNum !== undefined);
+
+    var cls = 'ortho-day';
+    if (isToday) cls += ' ortho-day-today';
+    if (isChangeDay) cls += ' ortho-day-change';
+
+    html += '<div class="' + cls + '"' + (isChangeDay ? ' onclick="showOrthoDayInfo(\'' + dateStr + '\', ' + trayNum + ')"' : '') + '>';
+    html += '<span class="ortho-day-num">' + d + '</span>';
+    if (isChangeDay) {
+      html += '<span class="ortho-day-dot">🦷</span>';
+    }
+    html += '</div>';
+  }
+
+  grid.innerHTML = html;
+}
+
+// 点击换牙套日期
+function showOrthoDayInfo(dateStr, trayNum) {
+  var parts = dateStr.split('-');
+  var displayStr = parts[0] + '年' + parseInt(parts[1]) + '月' + parseInt(parts[2]) + '日';
+  toast('🦷 ' + displayStr + '：第 ' + trayNum + ' 副牙套佩戴日');
+}
+
+// 上月
+function orthoPrevMonth() {
+  orthoCalendarMonth--;
+  if (orthoCalendarMonth < 1) { orthoCalendarMonth = 12; orthoCalendarYear--; }
+  renderOrthoCalendar();
+}
+
+// 下月
+function orthoNextMonth() {
+  orthoCalendarMonth++;
+  if (orthoCalendarMonth > 12) { orthoCalendarMonth = 1; orthoCalendarYear++; }
+  renderOrthoCalendar();
+}
+
+// 回到今天
+function orthoGoToToday() {
+  var now = new Date();
+  orthoCalendarYear = now.getFullYear();
+  orthoCalendarMonth = now.getMonth() + 1;
+  renderOrthoCalendar();
+}
+
+// 检查是否需要提醒
+function checkOrthoAlert() {
+  if (!orthoRecord) return;
+  var banner = document.getElementById('orthoAlertBanner');
+  if (!banner) return;
+
+  var daysLeft = orthoRecord.days_left;
+  var isOverdue = orthoRecord.is_overdue;
+  var daysWorn = orthoRecord.days_worn;
+  var interval = orthoRecord.change_interval;
+
+  if (isOverdue) {
+    var overdueDays = daysWorn - interval;
+    document.getElementById('orthoAlertIcon').textContent = '⚠️';
+    document.getElementById('orthoAlertText').textContent = '您已超出换牙套计划 ' + overdueDays + ' 天，请尽快更换！';
+    banner.style.display = 'flex';
+    banner.className = 'ortho-alert-banner ortho-alert-danger';
+  } else if (daysLeft === 0) {
+    // 今天就是换牙套日
+    document.getElementById('orthoAlertIcon').textContent = '🦷';
+    document.getElementById('orthoAlertText').textContent = '提醒：今天是第 ' + orthoRecord.tray_number + ' 副牙套的更换日，请及时更换！';
+    banner.style.display = 'flex';
+    banner.className = 'ortho-alert-banner ortho-alert-success';
+  } else {
+    banner.style.display = 'none';
+  }
+}
+
+// 打开换新牙套弹窗
+function openChangeTrayModal() {
+  var now = formatDate(new Date());
+  var nextTrayNum = orthoRecord ? (orthoRecord.tray_number + 1) : 1;
+  var interval = orthoRecord ? orthoRecord.change_interval : 14;
+
+  var html = '<h3>🦷 换新牙套</h3>';
+  html += '<div class="form-group"><label>开始佩戴日期</label><input type="date" id="orthoStartDate" value="' + now + '"></div>';
+  html += '<div class="form-group"><label>牙套编号（第几副）</label><input type="number" id="orthoTrayNum" value="' + nextTrayNum + '" min="1"></div>';
+  html += '<div class="form-group"><label>更换间隔（天）</label><input type="number" id="orthoInterval" value="' + interval + '" min="1" max="365"></div>';
+  html += '<div class="modal-actions"><button class="btn-primary" onclick="submitChangeTray()">确认更换</button><button class="btn-secondary" onclick="closeModal()">取消</button></div>';
+
+  openCustomModal(html);
+}
+
+// 提交换牙套
+async function submitChangeTray() {
+  var startDate = document.getElementById('orthoStartDate').value;
+  var trayNum = parseInt(document.getElementById('orthoTrayNum').value);
+  var interval = parseInt(document.getElementById('orthoInterval').value);
+
+  if (!startDate) { toast('请选择开始日期', 'error'); return; }
+  if (!trayNum || trayNum < 1) { toast('请输入有效的牙套编号', 'error'); return; }
+  if (!interval || interval < 1) { toast('请输入有效的间隔天数', 'error'); return; }
+
+  try {
+    await API.createOrthodontic({ start_date: startDate, tray_number: trayNum, change_interval: interval });
+    closeModal();
+    toast('牙套更换记录已保存 🦷');
+    await loadOrthoData();
+  } catch (err) {
+    toast('保存失败: ' + err.message, 'error');
+  }
+}
+
+// 打开修改间隔弹窗
+function openEditIntervalModal() {
+  if (!orthoRecord) { toast('请先创建箍牙记录', 'error'); return; }
+  var html = '<h3>⚙️ 修改更换间隔</h3>';
+  html += '<p style="color:var(--text-secondary);margin-bottom:16px;">当前间隔：' + orthoRecord.change_interval + ' 天</p>';
+  html += '<div class="form-group"><label>新的更换间隔（天）</label><input type="number" id="editInterval" value="' + orthoRecord.change_interval + '" min="1" max="365"></div>';
+  html += '<div class="modal-actions"><button class="btn-primary" onclick="submitEditInterval()">确认修改</button><button class="btn-secondary" onclick="closeModal()">取消</button></div>';
+  openCustomModal(html);
+}
+
+// 提交修改间隔
+async function submitEditInterval() {
+  var interval = parseInt(document.getElementById('editInterval').value);
+  if (!interval || interval < 1) { toast('请输入有效的间隔天数', 'error'); return; }
+  try {
+    await API.updateOrthodontic({ change_interval: interval });
+    closeModal();
+    toast('更换间隔已更新');
+    await loadOrthoData();
+  } catch (err) {
+    toast('修改失败: ' + err.message, 'error');
+  }
+}
+
+// 删除记录
+async function deleteOrthoRecord() {
+  if (!orthoRecord) return;
+  if (!confirm('确定删除箍牙记录吗？此操作不可恢复。')) return;
+  try {
+    await API.deleteOrthodontic();
+    orthoRecord = null;
+    orthoChangeDates = [];
+    toast('记录已删除');
+    await loadOrthoData();
+  } catch (err) {
+    toast('删除失败: ' + err.message, 'error');
+  }
+}
+
+// 自定义弹窗辅助
+function openCustomModal(html) {
+  var overlay = document.getElementById('modalOverlay');
+  var content = document.getElementById('modalContent');
+  content.innerHTML = html;
+  overlay.style.display = 'flex';
+}
+
+// 在应用初始化时检查箍牙提醒
+async function checkOrthoReminderOnStart() {
+  try {
+    var result = await API.getOrthodontic();
+    if (!result.record) return;
+    var daysLeft = result.record.days_left;
+    var isOverdue = result.record.is_overdue;
+    var daysWorn = result.record.days_worn;
+    var interval = result.record.change_interval;
+
+    if (isOverdue) {
+      var overdueDays = daysWorn - interval;
+      toast('⚠️ 您已超出换牙套计划 ' + overdueDays + ' 天，请尽快更换！', 'error');
+    } else if (daysLeft <= 2 && daysLeft >= 0) {
+      if (daysLeft === 0) {
+        toast('🦷 今天是第 ' + result.record.tray_number + ' 副牙套的更换日！', 'info');
+      } else {
+        toast('🦷 距离下次换牙套还剩 ' + daysLeft + ' 天', 'info');
+      }
+    }
+  } catch (e) {
+    // 静默失败，不影响主流程
+  }
+}

@@ -720,3 +720,91 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;bottom:0;background:
   .fitness-cal-stat{font-size:11px}
   .fitness-cal-day-badge{font-size:11px}
 }
+
+/* ========== 箍牙提醒板块 ========== */
+
+/* 提醒横幅 */
+.ortho-alert-banner{display:flex;align-items:center;justify-content:space-between;padding:16px 24px;border-radius:var(--radius);margin-bottom:20px;flex-wrap:wrap;gap:12px}
+.ortho-alert-success{background:linear-gradient(135deg,rgba(76,175,80,0.12),rgba(129,199,132,0.06));border:1px solid rgba(76,175,80,0.3)}
+.ortho-alert-danger{background:linear-gradient(135deg,rgba(239,83,80,0.12),rgba(229,115,115,0.06));border:1px solid rgba(239,83,80,0.3)}
+.ortho-alert-content{display:flex;align-items:center;gap:12px;flex:1}
+.ortho-alert-icon{font-size:24px}
+.ortho-alert-text{font-size:15px;color:var(--text-primary);line-height:1.5}
+.ortho-alert-btn{padding:10px 22px;background:linear-gradient(135deg,var(--accent),var(--accent-3));border:none;border-radius:22px;color:#fff;cursor:pointer;font-size:14px;font-weight:600;transition:var(--transition);min-height:44px;white-space:nowrap}
+.ortho-alert-btn:hover{box-shadow:0 4px 15px rgba(79,195,247,0.3);transform:translateY(-1px)}
+
+/* 统计卡片 */
+.ortho-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:20px}
+.ortho-stat-card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:20px 22px;display:flex;align-items:center;gap:14px;transition:var(--transition)}
+.ortho-stat-card:hover{border-color:var(--accent);box-shadow:0 4px 16px rgba(79,195,247,0.08)}
+.ortho-stat-icon{font-size:32px;flex-shrink:0}
+.ortho-stat-info{flex:1;min-width:0}
+.ortho-stat-label{font-size:13px;color:var(--text-secondary);margin-bottom:4px;font-weight:500}
+.ortho-stat-value{font-size:20px;font-weight:700;color:var(--text-primary);word-break:break-word}
+
+/* 空状态 */
+.ortho-empty{text-align:center;padding:60px 20px;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:20px}
+.ortho-empty .empty-icon{font-size:56px;margin-bottom:16px}
+.ortho-empty p{font-size:18px;color:var(--text-secondary);margin:0}
+.ortho-empty-sub{font-size:14px!important;color:var(--text-muted)!important;margin-top:8px!important}
+
+/* 操作按钮 */
+.ortho-actions{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:24px}
+.btn-ortho-primary{padding:12px 28px;background:linear-gradient(135deg,#43a047,#66bb6a);border:none;border-radius:22px;color:#fff;cursor:pointer;font-size:15px;font-weight:600;transition:var(--transition);min-height:44px}
+.btn-ortho-primary:hover{box-shadow:0 4px 15px rgba(67,160,71,0.35);transform:translateY(-1px)}
+.btn-ortho-secondary{padding:12px 24px;background:transparent;border:1px solid var(--border);border-radius:22px;color:var(--text-secondary);cursor:pointer;font-size:15px;font-weight:500;transition:var(--transition);min-height:44px}
+.btn-ortho-secondary:hover{border-color:var(--accent);color:var(--accent);background:rgba(79,195,247,0.06)}
+.btn-ortho-danger{padding:12px 24px;background:transparent;border:1px solid rgba(239,83,80,0.3);border-radius:22px;color:var(--text-muted);cursor:pointer;font-size:15px;font-weight:500;transition:var(--transition);min-height:44px}
+.btn-ortho-danger:hover{border-color:var(--danger);color:var(--danger);background:rgba(239,83,80,0.06)}
+
+/* 日历容器 */
+.ortho-calendar{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:24px}
+.ortho-calendar-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px}
+.ortho-calendar-header h2{font-size:18px;color:var(--text-primary);margin:0}
+.ortho-calendar-nav{display:flex;align-items:center;gap:8px}
+.ortho-calendar-nav button{padding:8px 16px;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text-secondary);cursor:pointer;font-size:14px;transition:var(--transition);min-height:40px}
+.ortho-calendar-nav button:hover{border-color:var(--accent);color:var(--accent)}
+.ortho-calendar-title{font-size:16px;font-weight:600;color:var(--text-primary);min-width:120px;text-align:center}
+
+/* 日历网格 */
+.ortho-calendar-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.ortho-weekday{padding:10px 4px;text-align:center;font-size:13px;font-weight:600;color:var(--text-secondary);text-transform:uppercase}
+.ortho-day{aspect-ratio:1;display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:var(--radius-sm);background:var(--bg-input);border:1px solid transparent;cursor:default;transition:var(--transition);position:relative;min-height:56px}
+.ortho-day-empty{background:transparent;cursor:default}
+.ortho-day-num{font-size:15px;font-weight:500;color:var(--text-primary)}
+.ortho-day-dot{font-size:14px;margin-top:2px}
+.ortho-day-today{border-color:var(--accent);background:rgba(79,195,247,0.08)}
+.ortho-day-today .ortho-day-num{color:var(--accent);font-weight:700}
+.ortho-day-change{background:rgba(239,83,80,0.08);border-color:rgba(239,83,80,0.3);cursor:pointer}
+.ortho-day-change:hover{border-color:var(--danger);box-shadow:0 2px 8px rgba(239,83,80,0.15);transform:scale(1.05)}
+.ortho-day-change .ortho-day-num{color:#ef5350;font-weight:600}
+
+/* 响应式 */
+@media(max-width:768px){
+  .ortho-stats{grid-template-columns:repeat(2,1fr);gap:10px}
+  .ortho-stat-card{padding:14px 16px;gap:10px}
+  .ortho-stat-icon{font-size:26px}
+  .ortho-stat-value{font-size:17px}
+  .ortho-actions{gap:8px}
+  .ortho-actions button{flex:1;min-width:0;font-size:14px;padding:10px 16px}
+  .ortho-calendar{padding:16px 12px}
+  .ortho-calendar-header h2{font-size:16px}
+  .ortho-day{min-height:44px}
+  .ortho-day-num{font-size:13px}
+  .ortho-day-dot{font-size:11px}
+  .ortho-alert-banner{padding:14px 18px}
+  .ortho-alert-text{font-size:14px}
+}
+@media(max-width:480px){
+  .ortho-stats{grid-template-columns:1fr 1fr;gap:8px}
+  .ortho-stat-card{padding:12px 14px;gap:8px}
+  .ortho-stat-icon{font-size:22px}
+  .ortho-stat-value{font-size:15px}
+  .ortho-stat-label{font-size:12px}
+  .ortho-calendar-grid{gap:2px}
+  .ortho-day{min-height:38px}
+  .ortho-day-num{font-size:12px}
+  .ortho-day-dot{font-size:10px}
+  .ortho-weekday{font-size:11px;padding:8px 2px}
+  .ortho-calendar-nav button{padding:6px 10px;font-size:12px;min-height:34px}
+}
