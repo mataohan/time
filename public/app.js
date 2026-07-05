@@ -2654,7 +2654,11 @@ async function loadOrthoData() {
       // 渲染统计卡片
       renderOrthoStats();
       // 渲染日历
-      renderOrthoCalendar();
+      try {
+        renderOrthoCalendar();
+      } catch (renderErr) {
+        console.error('[ORTHO] 日历渲染失败:', renderErr);
+      }
       // 显示/隐藏空状态
       document.getElementById('orthoEmpty').style.display = 'none';
       document.getElementById('orthoStats').style.display = 'flex';
@@ -2670,6 +2674,7 @@ async function loadOrthoData() {
       document.getElementById('orthoAlertBanner').style.display = 'none';
     }
   } catch (err) {
+    console.error('[ORTHO] 加载数据失败:', err);
     toast('加载箍牙数据失败: ' + err.message, 'error');
   }
 }
@@ -2733,7 +2738,16 @@ function renderOrthoCalendar() {
   var title = document.getElementById('orthoCalendarTitle');
   if (!grid) return;
 
-  title.textContent = orthoCalendarYear + '年 ' + orthoCalendarMonth + '月';
+  // 确保 calendar year/month 已初始化
+  if (!orthoCalendarYear || !orthoCalendarMonth) {
+    var now = new Date();
+    orthoCalendarYear = now.getFullYear();
+    orthoCalendarMonth = now.getMonth() + 1;
+  }
+
+  if (title) {
+    title.textContent = orthoCalendarYear + '年 ' + orthoCalendarMonth + '月';
+  }
 
   var firstDay = new Date(orthoCalendarYear, orthoCalendarMonth - 1, 1);
   var lastDay = new Date(orthoCalendarYear, orthoCalendarMonth, 0);
@@ -2841,9 +2855,9 @@ function openChangeTrayModal() {
   var interval = orthoRecord ? orthoRecord.change_interval : 14;
 
   var html = '<h3>🦷 换新牙套</h3>';
-  html += '<div class="form-group"><label>开始佩戴日期</label><input type="date" id="orthoStartDate" value="' + now + '"></div>';
-  html += '<div class="form-group"><label>牙套编号（第几副）</label><input type="number" id="orthoTrayNum" value="' + nextTrayNum + '" min="1"></div>';
-  html += '<div class="form-group"><label>更换间隔（天）</label><input type="number" id="orthoInterval" value="' + interval + '" min="1" max="365"></div>';
+  html += '<div class="form-group"><label>开始佩戴日期</label><input type="date" id="modalOrthoStartDate" value="' + now + '"></div>';
+  html += '<div class="form-group"><label>牙套编号（第几副）</label><input type="number" id="modalOrthoTrayNum" value="' + nextTrayNum + '" min="1"></div>';
+  html += '<div class="form-group"><label>更换间隔（天）</label><input type="number" id="modalOrthoInterval" value="' + interval + '" min="1" max="365"></div>';
   html += '<div class="modal-actions"><button class="btn-primary" onclick="submitChangeTray()">确认更换</button><button class="btn-secondary" onclick="closeModal()">取消</button></div>';
 
   openCustomModal(html);
@@ -2851,9 +2865,9 @@ function openChangeTrayModal() {
 
 // 提交换牙套
 async function submitChangeTray() {
-  var startDate = document.getElementById('orthoStartDate').value;
-  var trayNum = parseInt(document.getElementById('orthoTrayNum').value);
-  var interval = parseInt(document.getElementById('orthoInterval').value);
+  var startDate = document.getElementById('modalOrthoStartDate').value;
+  var trayNum = parseInt(document.getElementById('modalOrthoTrayNum').value);
+  var interval = parseInt(document.getElementById('modalOrthoInterval').value);
 
   if (!startDate) { toast('请选择开始日期', 'error'); return; }
   if (!trayNum || trayNum < 1) { toast('请输入有效的牙套编号', 'error'); return; }
