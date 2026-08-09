@@ -168,6 +168,18 @@ async function initDB() {
     )
   `);
 
+  // v2.8 碳循环功能：创建 carbon_cycle 表
+  await db.exec(`
+    CREATE TABLE IF NOT EXISTS carbon_cycle (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      user_id INT NOT NULL,
+      start_date DATE NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `);
+
   console.log('✅ TiDB Cloud 表初始化完成');
 }
 
@@ -911,6 +923,101 @@ app.delete('/api/orthodontic', authMiddleware, async (req, res) => {
   );
   if (changes === 0) return res.status(404).json({ error: '暂无箍牙记录可删除' });
   res.json({ message: '删除成功' });
+});
+
+// ========== 碳循环路由 ==========
+
+// 辅助函数：计算碳循环信息
+function calcCarbonCycle(startDateStr) {
+  const startDate = new Date(startDateStr);
+  startDate.setHours(0, 0, 0, 0);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const diffDays = Math.floor((today - startDate) / (1000 * 60 * 60 * 24));
+  // 每4天一个周期：0,1,2=低碳日，3=高碳日
+  const cycleDay = (diffDays % 4) + 1; // 1-4
+  const type = (diffDays % 4 === 3) ? 'high' : 'low';
+  // 距离下一次高碳日天数
+  const daysToHigh = (diffDays % 4 === 3) ? 0 : (3 - (diffDays % 4));
+
+  return {
+    type: type,
+    cycle_day: cycleDay,
+    days_to_high: daysToHigh,
+    date: today.toISOString().substring(0, 10)
+  };
+}
+
+// 获取碳循环记录和今天的信息
+app.get('/api/carbon', authMiddleware, async (req, res) => {
+  const record = await db.get(
+    'SELECT * FROM carbon_cycle WHERE user_id = ? ORDER BY id DESC LIMIT 1',
+    [req.userId]
+  );
+  if (!record) {
+    return res.json({ record: null, today: null });
+  }
+
+  const today = calcCarbonCycle(record.start_date);
+  res.json({
+    record: {
+      id: record.id,
+      start_date: record.start_date,
+      created_at: record.created_at
+    },
+    today: today
+  });
+});
+
+// 获取今日碳循环类型（轻量接口）
+app.get('/api/carbon/today', authMiddleware, async (req, res) => {
+  const record = await db.get(
+    'SELECT * FROM carbon_cycle WHERE user_id = ? ORDER BY id DESC LIMIT 1',
+    [req.userId]
+  );
+  if (!record) {
+    return res.json({ today: null });
+  }
+
+  const today = calcCarbonCycle(record.start_date);
+  res.json({ today: today });
+});
+
+// 创建或更新碳循环起始日期
+app.post('/api/carbon', authMiddleware, async (req, res) => {
+  const { start_date } = req.body;
+  if (!start_date) {
+    return res.status(400).json({ error: '起始日期不能为空' });
+  }
+  const safeDate = String(start_date).substring(0, 10);
+
+  // 检查是否已有记录
+  const existing = await db.get(
+    'SELECT * FROM carbon_cycle WHERE user_id = ? ORDER BY id DESC LIMIT 1',
+    [req.userId]
+  );
+
+  let record;
+  if (existing) {
+    await db.run(
+      'UPDATE carbon_cycle SET start_date = ? WHERE id = ? AND user_id = ?',
+      [safeDate, existing.id, req.userId]
+    );
+    record = await db.get('SELECT * FROM carbon_cycle WHERE id = ?', [existing.id]);
+  } else {
+    record = await db.insert(
+      'INSERT INTO carbon_cycle (user_id, start_date) VALUES (?, ?)',
+      [req.userId, safeDate]
+    );
+  }
+
+  const today = calcCarbonCycle(record.start_date);
+  res.json({
+    message: existing ? '更新成功' : '创建成功',
+    record: record,
+    today: today
+  });
 });
 
 // ========== 宠物档案路由 ==========

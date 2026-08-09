@@ -570,157 +570,6 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;bottom:0;background:
   .modal h3{font-size:24px;margin-bottom:28px}
 }
 
-/* ========== 健身计划板块 ========== */
-.fitness-section{display:flex;flex-direction:column;gap:20px}
-
-/* 顶部统计卡片 */
-.fitness-stats-bar{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
-.fitness-stat-card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:20px;display:flex;align-items:center;gap:14px;transition:var(--transition)}
-.fitness-stat-card:hover{border-color:var(--border-accent);box-shadow:0 4px 16px rgba(0,0,0,0.25)}
-.fitness-stat-icon{font-size:32px;flex-shrink:0}
-.fitness-stat-info{flex:1;min-width:0}
-.fitness-stat-label{font-size:12px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px}
-.fitness-stat-value{font-size:16px;font-weight:700;color:var(--text-primary)}
-
-/* 主体布局 */
-.fitness-body{display:grid;grid-template-columns:1fr 380px;gap:20px;align-items:start}
-
-/* 训练日历 */
-.fitness-calendar-panel{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);overflow:visible}
-.fitness-calendar-header{display:flex;align-items:center;justify-content:space-between;padding:22px 26px;border-bottom:1px solid var(--border);flex-wrap:wrap;gap:10px}
-.fitness-calendar-header h2{font-size:20px;font-weight:600;color:var(--accent)}
-.fitness-date-range{font-size:13px;color:var(--text-muted);background:var(--bg-input);padding:6px 14px;border-radius:16px}
-
-.fitness-calendar-grid{display:grid;grid-template-columns:repeat(7,1fr);overflow:visible}
-.fitness-cal-day-header{text-align:center;padding:12px 4px;color:var(--text-muted);font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:1px;border-bottom:1px solid var(--border)}
-.fitness-cal-day-header:first-child,.fitness-cal-day-header:last-child{color:var(--accent)}
-
-.fitness-cal-day{padding:8px 5px;border:1px solid rgba(30,42,74,0.5);cursor:pointer;transition:var(--transition);min-height:130px;display:flex;flex-direction:column;align-items:center;gap:3px;overflow:visible}
-.fitness-cal-day:hover{background:var(--bg-card-hover);border-color:var(--border-accent);transform:translateY(-1px);box-shadow:0 4px 12px rgba(0,0,0,0.2)}
-.fitness-cal-empty{background:transparent;border:none;cursor:default;min-height:130px}
-.fitness-cal-empty:hover{background:transparent;transform:none;box-shadow:none}
-.fitness-cal-rest{opacity:0.55}
-.fitness-cal-rest:hover{opacity:0.8}
-
-.fitness-cal-date{font-size:11px;font-weight:600;color:var(--text-muted);margin-bottom:1px;white-space:nowrap}
-.fitness-cal-header-row{display:flex;align-items:center;gap:4px;margin-bottom:1px}
-.fitness-cal-day-badge{font-size:10px;padding:1px 5px;border-radius:6px;font-weight:600;white-space:nowrap}
-.fitness-cal-icon{font-size:20px;line-height:1}
-.fitness-cal-type{font-size:11px;font-weight:600;text-align:center;line-height:1.3;padding:0 2px;margin-bottom:2px}
-.fitness-cal-summary{display:flex;flex-direction:column;align-items:center;gap:1px;margin-top:2px;width:100%}
-.fitness-cal-stat{font-size:10px;color:var(--text-muted);white-space:nowrap;line-height:1.4}
-.fitness-cal-rest-label{font-size:12px;color:var(--text-muted);margin-top:auto;padding:2px 8px;background:rgba(90,100,128,0.15);border-radius:8px}
-
-/* 右侧面板 */
-.fitness-side-panel{display:flex;flex-direction:column;gap:20px}
-
-/* 饮食建议卡片 */
-.fitness-meal-card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
-.fitness-meal-header{display:flex;justify-content:space-between;align-items:center;padding:20px 22px;border-bottom:1px solid var(--border)}
-.fitness-meal-header h3{font-size:17px;color:var(--accent);margin:0}
-.fitness-meal-date{font-size:13px;color:var(--text-muted);background:var(--bg-input);padding:4px 12px;border-radius:12px}
-
-.fitness-meal-timeline{padding:12px 16px;max-height:55vh;overflow-y:auto}
-.fitness-meal-item{border-left:2px solid var(--border);margin-left:12px;padding:0 0 0 18px;position:relative}
-.fitness-meal-item:last-child{border-left-color:transparent}
-.fitness-meal-time{padding:6px 0}
-.fitness-meal-dot{position:absolute;left:-7px;top:12px;width:12px;height:12px;border-radius:50%;border:2px solid var(--bg-card);background:var(--border)}
-.fitness-meal-active .fitness-meal-dot{background:var(--accent);box-shadow:0 0 8px var(--accent-glow)}
-.fitness-meal-label{font-size:14px;font-weight:600;color:var(--text-primary)}
-.fitness-meal-active .fitness-meal-label{color:var(--accent)}
-.fitness-meal-cal{font-size:12px;color:var(--text-muted)}
-
-.fitness-meal-foods{background:var(--bg-input);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:8px}
-.fitness-meal-food-item{display:flex;flex-wrap:wrap;gap:4px 10px;padding:5px 0;border-bottom:1px solid rgba(30,42,74,0.3);align-items:baseline}
-.fitness-meal-food-item:last-child{border-bottom:none}
-.fitness-meal-food-name{font-size:13px;font-weight:600;color:var(--text-primary);min-width:70px}
-.fitness-meal-food-amount{font-size:12px;color:var(--accent);background:rgba(79,195,247,0.1);padding:1px 8px;border-radius:8px;white-space:nowrap}
-.fitness-meal-food-note{font-size:12px;color:var(--text-muted);flex-basis:100%}
-
-.fitness-meal-tip{font-size:12px;color:var(--text-secondary);line-height:1.6;margin-bottom:6px;padding:8px 10px;background:rgba(79,195,247,0.04);border-radius:8px}
-.fitness-meal-macros{font-size:12px;color:var(--text-muted);margin-bottom:4px}
-
-.fitness-meal-alt{margin-top:6px}
-.fitness-meal-alt summary{font-size:12px;color:var(--accent);cursor:pointer;padding:4px 0;user-select:none}
-.fitness-meal-alt summary:hover{text-decoration:underline}
-.fitness-meal-alt-item{display:flex;flex-wrap:wrap;gap:4px 10px;padding:3px 8px;font-size:12px;color:var(--text-secondary);border-bottom:1px dotted rgba(30,42,74,0.2)}
-.fitness-meal-alt-item:last-child{border-bottom:none}
-
-.fitness-meal-summary{padding:16px 22px;border-top:1px solid var(--border);background:var(--bg-input)}
-.fitness-meal-total{font-size:15px;color:var(--text-primary)}
-.fitness-meal-total strong{color:var(--accent);font-size:18px}
-
-/* 激励语卡片 */
-.fitness-motto-card{background:linear-gradient(135deg,rgba(79,195,247,0.06),rgba(124,77,255,0.06));border:1px solid var(--border);border-radius:var(--radius);padding:28px 22px;text-align:center;position:relative;overflow:hidden;transition:transform 0.2s ease}
-.fitness-motto-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--accent),var(--accent-3),var(--accent-2))}
-.fitness-motto-icon{font-size:32px;margin-bottom:12px}
-.fitness-motto-text{font-size:15px;color:var(--text-primary);line-height:1.7;font-weight:500;margin-bottom:14px}
-.fitness-motto-refresh{display:inline-block;font-size:12px;color:var(--text-muted);cursor:pointer;padding:6px 16px;border:1px solid var(--border);border-radius:16px;transition:var(--transition);user-select:none}
-.fitness-motto-refresh:hover{border-color:var(--accent);color:var(--accent);background:rgba(79,195,247,0.06)}
-
-/* 平板适配 */
-@media(max-width:1024px){
-  .fitness-stats-bar{grid-template-columns:repeat(2,1fr)}
-  .fitness-body{grid-template-columns:1fr}
-  .fitness-side-panel{display:grid;grid-template-columns:1fr 1fr;gap:16px}
-  .fitness-cal-day{min-height:110px;padding:5px 2px}
-  .fitness-cal-empty{min-height:110px}
-  .fitness-cal-type{font-size:10px}
-  .fitness-cal-stat{font-size:9px}
-  .fitness-meal-timeline{max-height:none}
-}
-
-/* 手机适配 */
-@media(max-width:768px){
-  .fitness-stats-bar{grid-template-columns:repeat(2,1fr);gap:10px}
-  .fitness-stat-card{padding:14px;gap:10px}
-  .fitness-stat-icon{font-size:24px}
-  .fitness-stat-value{font-size:14px}
-  .fitness-body{grid-template-columns:1fr}
-  .fitness-side-panel{display:flex;flex-direction:column}
-  .fitness-calendar-header{padding:16px 18px}
-  .fitness-calendar-header h2{font-size:18px}
-  .fitness-cal-day-header{font-size:10px;padding:8px 1px}
-  .fitness-cal-day{min-height:105px;padding:4px 1px}
-  .fitness-cal-empty{min-height:105px}
-  .fitness-cal-date{font-size:9px}
-  .fitness-cal-day-badge{font-size:8px}
-  .fitness-cal-icon{font-size:16px}
-  .fitness-cal-type{font-size:9px}
-  .fitness-cal-stat{font-size:8px}
-  .fitness-cal-rest-label{font-size:10px}
-  .fitness-meal-header{padding:14px 16px}
-  .fitness-meal-header h3{font-size:15px}
-  .fitness-motto-text{font-size:14px}
-}
-
-@media(max-width:480px){
-  .fitness-stats-bar{grid-template-columns:1fr 1fr;gap:8px}
-  .fitness-stat-card{padding:12px 10px;gap:8px}
-  .fitness-stat-icon{font-size:22px}
-  .fitness-stat-value{font-size:13px}
-  .fitness-cal-day{min-height:95px;padding:3px 1px}
-  .fitness-cal-empty{min-height:95px}
-  .fitness-cal-date{font-size:8px}
-  .fitness-cal-icon{font-size:14px}
-  .fitness-cal-type{font-size:8px}
-  .fitness-cal-stat{font-size:7px}
-  .fitness-cal-day-badge{font-size:7px}
-  .fitness-cal-rest-label{font-size:9px}
-}
-
-/* 宽屏优化 */
-@media(min-width:1600px){
-  .fitness-body{grid-template-columns:1fr 420px;gap:24px}
-  .fitness-cal-day{min-height:150px;padding:12px 8px}
-  .fitness-cal-empty{min-height:150px}
-  .fitness-cal-date{font-size:13px}
-  .fitness-cal-icon{font-size:26px}
-  .fitness-cal-type{font-size:13px}
-  .fitness-cal-stat{font-size:11px}
-  .fitness-cal-day-badge{font-size:11px}
-}
-
 /* ========== 箍牙提醒板块 ========== */
 
 /* 提醒横幅 */
@@ -807,4 +656,105 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;bottom:0;background:
   .ortho-day-dot{font-size:10px}
   .ortho-weekday{font-size:11px;padding:8px 2px}
   .ortho-calendar-nav button{padding:6px 10px;font-size:12px;min-height:34px}
+}
+
+/* ==================== 主页每日提醒横幅 ==================== */
+.daily-banner{margin-bottom:20px;display:none}
+.daily-banner-inner{display:flex;gap:0;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+.daily-banner-item{flex:1;display:flex;align-items:center;gap:14px;padding:16px 20px;transition:var(--transition);border-left:4px solid transparent;min-width:0}
+.daily-banner-item:hover{background:var(--bg-card-hover)}
+.daily-banner-icon{font-size:28px;flex-shrink:0;width:40px;text-align:center}
+.daily-banner-content{flex:1;min-width:0}
+.daily-banner-label{font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:3px}
+.daily-banner-text{font-size:14px;color:var(--text-secondary);line-height:1.4;word-break:break-word}
+.daily-banner-divider{width:1px;background:var(--border);margin:12px 0;align-self:stretch}
+.daily-banner-carbon{min-width:0}
+.daily-banner-ortho{min-width:0}
+
+/* 碳循环板块 */
+.carbon-section{display:flex;flex-direction:column;gap:20px}
+.carbon-empty{text-align:center;padding:60px 20px;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius)}
+.carbon-empty .empty-icon{font-size:56px;margin-bottom:16px}
+.carbon-empty p{color:var(--text-secondary);font-size:16px;margin-bottom:8px}
+.carbon-empty-sub{font-size:14px!important;color:var(--text-muted)!important;margin-bottom:20px!important}
+.btn-carbon-primary{padding:14px 32px;background:linear-gradient(135deg,var(--accent),var(--accent-2));border:none;border-radius:var(--radius-sm);color:#fff;font-size:16px;font-weight:600;cursor:pointer;transition:var(--transition);min-height:44px}
+.btn-carbon-primary:hover{transform:translateY(-1px);box-shadow:0 4px 16px var(--accent-glow)}
+.btn-carbon-secondary{padding:12px 24px;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text-secondary);font-size:15px;cursor:pointer;transition:var(--transition);min-height:44px}
+.btn-carbon-secondary:hover{border-color:var(--accent);color:var(--accent)}
+
+/* 碳循环状态卡片 */
+.carbon-status-card{display:flex;align-items:center;gap:20px;padding:28px;background:var(--bg-card);border:2px solid var(--border);border-radius:var(--radius);flex-wrap:wrap}
+.carbon-status-icon{font-size:52px;flex-shrink:0}
+.carbon-status-info{flex:1;min-width:0}
+.carbon-status-label{font-size:13px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px}
+.carbon-status-type{font-size:32px;font-weight:700;margin-bottom:4px}
+.carbon-status-detail{font-size:15px;color:var(--text-secondary)}
+.carbon-countdown{text-align:center;padding:16px 24px;background:var(--bg-input);border-radius:var(--radius-sm);min-width:120px}
+.carbon-countdown-label{font-size:12px;color:var(--text-muted);margin-bottom:6px}
+.carbon-countdown-value{font-size:24px;font-weight:700;color:var(--text-primary)}
+
+/* 碳循环日历 */
+.carbon-calendar{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:24px}
+.carbon-calendar-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px}
+.carbon-calendar-header h2{font-size:18px;color:var(--text-primary);margin:0}
+.carbon-calendar-nav{display:flex;align-items:center;gap:8px}
+.carbon-calendar-nav button{padding:8px 16px;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text-secondary);cursor:pointer;font-size:14px;transition:var(--transition);min-height:40px}
+.carbon-calendar-nav button:hover{border-color:var(--accent);color:var(--accent)}
+.carbon-calendar-title{font-size:16px;font-weight:600;color:var(--text-primary);min-width:120px;text-align:center}
+.carbon-calendar-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.carbon-weekday{padding:10px 4px;text-align:center;font-size:13px;font-weight:600;color:var(--text-secondary);text-transform:uppercase}
+.carbon-day{aspect-ratio:1;display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:var(--radius-sm);background:var(--bg-input);border:1px solid transparent;transition:var(--transition);position:relative;min-height:52px}
+.carbon-day-empty{background:transparent}
+.carbon-day-none{opacity:0.35}
+.carbon-day-low{background:rgba(76,175,80,0.1);border-color:rgba(76,175,80,0.25)}
+.carbon-day-high{background:rgba(255,152,0,0.1);border-color:rgba(255,152,0,0.25)}
+.carbon-day-today{border-color:var(--accent)!important;background:rgba(79,195,247,0.08)!important}
+.carbon-day-num{font-size:15px;font-weight:500;color:var(--text-primary)}
+.carbon-day-label{font-size:11px;margin-top:2px;font-weight:600}
+.carbon-day-low .carbon-day-label{color:#4caf50}
+.carbon-day-high .carbon-day-label{color:#ff9800}
+
+.carbon-legend{display:flex;gap:20px;margin-top:16px;justify-content:center}
+.carbon-legend-item{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-secondary)}
+.carbon-legend-dot{width:12px;height:12px;border-radius:3px}
+.carbon-legend-low{background:rgba(76,175,80,0.4);border:1px solid rgba(76,175,80,0.6)}
+.carbon-legend-high{background:rgba(255,152,0,0.4);border:1px solid rgba(255,152,0,0.6)}
+
+/* 碳循环食谱卡片 */
+.carbon-recipe-card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:24px}
+.carbon-recipe-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px}
+.carbon-recipe-header h3{font-size:18px;color:var(--text-primary);margin:0}
+.carbon-recipe-tag{font-size:13px;padding:4px 14px;border-radius:12px;font-weight:600}
+.carbon-recipe-meals{display:flex;flex-direction:column;gap:12px}
+.carbon-recipe-meal{display:flex;align-items:flex-start;gap:12px;padding:14px 16px;background:var(--bg-input);border-radius:var(--radius-sm);border:1px solid var(--border)}
+.carbon-recipe-meal-label{font-size:14px;font-weight:600;color:var(--text-primary);white-space:nowrap;min-width:60px}
+.carbon-recipe-meal-text{font-size:14px;color:var(--text-secondary);line-height:1.5}
+.carbon-recipe-tip{margin-top:16px;padding:12px 16px;background:rgba(79,195,247,0.06);border:1px solid rgba(79,195,247,0.15);border-radius:var(--radius-sm);font-size:13px;color:var(--text-secondary);line-height:1.6}
+
+.carbon-actions{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+
+/* 碳循环响应式 */
+@media(max-width:768px){
+  .daily-banner-inner{flex-direction:column}
+  .daily-banner-divider{width:auto;height:1px;margin:0 20px;align-self:stretch}
+  .daily-banner-item{padding:14px 18px}
+  .daily-banner-text{font-size:13px}
+  .carbon-status-card{flex-direction:column;text-align:center;padding:22px}
+  .carbon-status-type{font-size:28px}
+  .carbon-countdown{min-width:0;width:100%}
+  .carbon-calendar{padding:16px 12px}
+  .carbon-day{min-height:40px}
+  .carbon-day-num{font-size:13px}
+  .carbon-day-label{font-size:10px}
+  .carbon-recipe-meal{flex-direction:column;gap:4px}
+}
+@media(max-width:480px){
+  .carbon-status-type{font-size:24px}
+  .carbon-status-icon{font-size:40px}
+  .carbon-calendar-grid{gap:2px}
+  .carbon-day{min-height:34px}
+  .carbon-day-num{font-size:12px}
+  .carbon-day-label{font-size:9px}
+  .carbon-weekday{font-size:11px;padding:8px 2px}
+  .carbon-calendar-nav button{padding:6px 10px;font-size:12px;min-height:34px}
 }

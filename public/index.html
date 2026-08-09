@@ -38,10 +38,34 @@
     <button class="tab-btn" onclick="switchTab('expenses')">💰 记账</button>
     <button class="tab-btn" onclick="switchTab('report')">📊 账单查询</button>
     <button class="tab-btn" onclick="switchTab('pets')">🐱 宠物档案</button>
-    <button class="tab-btn" onclick="switchTab('fitness')">🏋️ 健身计划</button>
     <button class="tab-btn" onclick="switchTab('orthodontic')">🦷 箍牙提醒</button>
+    <button class="tab-btn" onclick="switchTab('carbon')">🥗 碳循环</button>
   </div>
   <div class="content-area">
+
+    <!-- 主页每日提醒横幅 -->
+    <div class="daily-banner" id="dailyBanner" style="display:none;">
+      <div class="daily-banner-inner">
+        <!-- 碳循环提醒 -->
+        <div class="daily-banner-item daily-banner-carbon" id="dailyBannerCarbon" onclick="switchTab('carbon')" style="cursor:pointer;">
+          <div class="daily-banner-icon" id="dailyBannerCarbonIcon">🥗</div>
+          <div class="daily-banner-content">
+            <div class="daily-banner-label">碳循环</div>
+            <div class="daily-banner-text" id="dailyBannerCarbonText">加载中...</div>
+          </div>
+        </div>
+        <!-- 分隔线 -->
+        <div class="daily-banner-divider"></div>
+        <!-- 箍牙提醒 -->
+        <div class="daily-banner-item daily-banner-ortho" id="dailyBannerOrtho" onclick="switchTab('orthodontic')" style="cursor:pointer;">
+          <div class="daily-banner-icon" id="dailyBannerOrthoIcon">🦷</div>
+          <div class="daily-banner-content">
+            <div class="daily-banner-label">箍牙提醒</div>
+            <div class="daily-banner-text" id="dailyBannerOrthoText">加载中...</div>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <!-- 日历板块 -->
     <div id="calendarTab" class="calendar-section">
@@ -186,69 +210,62 @@
       </div>
     </div>
 
-    <!-- 健身计划板块 -->
-    <div id="fitnessTab" class="fitness-section" style="display:none;">
-      <!-- 顶部统计卡片 -->
-      <div class="fitness-stats-bar">
-        <div class="fitness-stat-card">
-          <div class="fitness-stat-icon">📏</div>
-          <div class="fitness-stat-info">
-            <div class="fitness-stat-label">身体参数</div>
-            <div class="fitness-stat-value">171cm / 70kg</div>
-          </div>
-        </div>
-        <div class="fitness-stat-card">
-          <div class="fitness-stat-icon">🎯</div>
-          <div class="fitness-stat-info">
-            <div class="fitness-stat-label">目标</div>
-            <div class="fitness-stat-value">减至 65kg</div>
-          </div>
-        </div>
-        <div class="fitness-stat-card">
-          <div class="fitness-stat-icon">🔥</div>
-          <div class="fitness-stat-info">
-            <div class="fitness-stat-label">每日热量</div>
-            <div class="fitness-stat-value">1850 大卡</div>
-          </div>
-        </div>
-        <div class="fitness-stat-card">
-          <div class="fitness-stat-icon">📅</div>
-          <div class="fitness-stat-info">
-            <div class="fitness-stat-label">训练频率</div>
-            <div class="fitness-stat-value">每周 5 练</div>
-          </div>
-        </div>
+    <!-- 碳循环板块 -->
+    <div id="carbonTab" class="carbon-section" style="display:none;">
+      <!-- 初始设置弹窗 -->
+      <div class="carbon-empty" id="carbonEmpty" style="display:none;">
+        <div class="empty-icon">🥗</div>
+        <p>尚未设置碳循环起始日期</p>
+        <p class="carbon-empty-sub">碳循环每4天一个周期：3天低碳 + 1天高碳</p>
+        <button class="btn-carbon-primary" onclick="setupCarbonCycle()">📅 从今天开始</button>
       </div>
 
-      <!-- 主体内容 -->
-      <div class="fitness-body">
-        <!-- 左：21天训练日历 -->
-        <div class="fitness-calendar-panel">
-          <div class="fitness-calendar-header">
-            <h2>📋 21天训练计划</h2>
-            <span class="fitness-date-range" id="fitnessDateRange"></span>
+      <!-- 碳循环数据区 -->
+      <div id="carbonData" style="display:none;">
+        <!-- 今日状态卡片 -->
+        <div class="carbon-status-card" id="carbonStatusCard">
+          <div class="carbon-status-icon" id="carbonStatusIcon">🥗</div>
+          <div class="carbon-status-info">
+            <div class="carbon-status-label">今日碳循环</div>
+            <div class="carbon-status-type" id="carbonStatusType">低碳日</div>
+            <div class="carbon-status-detail" id="carbonStatusDetail">周期第 1 天</div>
           </div>
-          <div class="fitness-calendar-grid" id="fitnessCalendarGrid"></div>
+          <div class="carbon-countdown" id="carbonCountdown">
+            <div class="carbon-countdown-label">距下一次高碳日</div>
+            <div class="carbon-countdown-value" id="carbonCountdownValue">3 天</div>
+          </div>
         </div>
 
-        <!-- 右：今日饮食 + 激励语 -->
-        <div class="fitness-side-panel">
-          <!-- 今日饮食建议 -->
-          <div class="fitness-meal-card">
-            <div class="fitness-meal-header">
-              <h3>🍽️ 今日饮食建议</h3>
-              <span class="fitness-meal-date" id="fitnessMealDate"></span>
+        <!-- 碳循环日历 -->
+        <div class="carbon-calendar" id="carbonCalendarWrap">
+          <div class="carbon-calendar-header">
+            <h2>📅 碳循环日历</h2>
+            <div class="carbon-calendar-nav">
+              <button onclick="carbonPrevMonth()">◀</button>
+              <span class="carbon-calendar-title" id="carbonCalendarTitle"></span>
+              <button onclick="carbonNextMonth()">▶</button>
+              <button class="btn-today" onclick="carbonGoToToday()">今天</button>
             </div>
-            <div class="fitness-meal-timeline" id="fitnessMealTimeline"></div>
-            <div class="fitness-meal-summary" id="fitnessMealSummary"></div>
           </div>
+          <div class="carbon-calendar-grid" id="carbonCalendarGrid"></div>
+          <div class="carbon-legend">
+            <span class="carbon-legend-item"><span class="carbon-legend-dot carbon-legend-low"></span> 低碳日</span>
+            <span class="carbon-legend-item"><span class="carbon-legend-dot carbon-legend-high"></span> 高碳日</span>
+          </div>
+        </div>
 
-          <!-- 每日激励语 -->
-          <div class="fitness-motto-card" id="fitnessMotto">
-            <div class="fitness-motto-icon">💪</div>
-            <div class="fitness-motto-text" id="fitnessMottoText"></div>
-            <div class="fitness-motto-refresh" onclick="refreshFitnessMotto()">🔄 换一句</div>
+        <!-- 食谱建议 -->
+        <div class="carbon-recipe-card" id="carbonRecipeCard">
+          <div class="carbon-recipe-header">
+            <h3 id="carbonRecipeTitle">🍽️ 今日食谱推荐</h3>
+            <span class="carbon-recipe-tag" id="carbonRecipeTag">低碳日</span>
           </div>
+          <div class="carbon-recipe-content" id="carbonRecipeContent"></div>
+        </div>
+
+        <!-- 操作按钮 -->
+        <div class="carbon-actions">
+          <button class="btn-carbon-secondary" onclick="resetCarbonCycle()">🔄 重新设置起始日期</button>
         </div>
       </div>
     </div>
