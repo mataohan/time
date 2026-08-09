@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>时间管理大师</title>
-<link rel="stylesheet" href="style.css?v=3.0">
+<link rel="stylesheet" href="style.css?v=3.1">
 </head>
 <body>
 
@@ -40,6 +40,7 @@
     <button class="tab-btn" onclick="switchTab('pets')">🐱 宠物档案</button>
     <button class="tab-btn" onclick="switchTab('orthodontic')">🦷 箍牙提醒</button>
     <button class="tab-btn" onclick="switchTab('carbon')">🥗 碳循环</button>
+    <button class="tab-btn" onclick="switchTab('hotels')">🏨 华住会间夜</button>
   </div>
   <div class="content-area">
 
@@ -270,6 +271,74 @@
       </div>
     </div>
 
+    <!-- 华住会间夜板块 -->
+    <div id="hotelsTab" class="hotels-section" style="display:none;">
+      <!-- 顶部统计卡片 -->
+      <div class="hotels-stats" id="hotelsStats">
+        <div class="hotels-stat-card">
+          <div class="hotels-stat-icon">🏨</div>
+          <div class="hotels-stat-info">
+            <div class="hotels-stat-label">总间夜数</div>
+            <div class="hotels-stat-value" id="hotelsTotalNights">0 次</div>
+          </div>
+        </div>
+        <div class="hotels-stat-card">
+          <div class="hotels-stat-icon">📅</div>
+          <div class="hotels-stat-info">
+            <div class="hotels-stat-label">最近入住</div>
+            <div class="hotels-stat-value" id="hotelsLastStay">—</div>
+          </div>
+        </div>
+        <div class="hotels-stat-card">
+          <div class="hotels-stat-icon">✅</div>
+          <div class="hotels-stat-info">
+            <div class="hotels-stat-label">当前可入住</div>
+            <div class="hotels-stat-value" id="hotelsAvailable">—</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 操作栏 -->
+      <div class="hotels-toolbar">
+        <button class="btn-hotels-primary" onclick="openHotelCheckinModal()">+ 记录入住</button>
+      </div>
+
+      <!-- 查询酒店区域 -->
+      <div class="hotels-search-card">
+        <div class="hotels-search-label">🔍 查询酒店冷却期状态</div>
+        <div class="hotels-search-row">
+          <input type="text" id="hotelSearchInput" class="hotels-search-input" placeholder="输入酒店名称..." onkeydown="if(event.key==='Enter')searchHotel()">
+          <button class="btn-hotels-search" onclick="searchHotel()">查询</button>
+        </div>
+        <div class="hotels-search-result" id="hotelSearchResult" style="display:none;"></div>
+      </div>
+
+      <!-- 日历视图 -->
+      <div class="hotels-calendar" id="hotelsCalendarWrap">
+        <div class="hotels-calendar-header">
+          <h2>📅 入住日历</h2>
+          <div class="hotels-calendar-nav">
+            <button onclick="hotelsPrevMonth()">◀</button>
+            <span class="hotels-calendar-title" id="hotelsCalendarTitle"></span>
+            <button onclick="hotelsNextMonth()">▶</button>
+            <button class="btn-today" onclick="hotelsGoToToday()">今天</button>
+          </div>
+        </div>
+        <div class="hotels-calendar-grid" id="hotelsCalendarGrid"></div>
+      </div>
+
+      <!-- 列表视图 -->
+      <div class="hotels-list-card">
+        <div class="hotels-list-header">
+          <h3>📋 入住记录</h3>
+          <span class="hotels-list-count" id="hotelsListCount">共 0 条</span>
+        </div>
+        <div class="hotels-list" id="hotelsList">
+          <div class="empty-state"><div class="empty-icon">🏨</div><p>暂无入住记录</p></div>
+        </div>
+      </div>
+    </div>
+
     <!-- 箍牙提醒板块 -->
     <div id="orthodonticTab" class="ortho-section" style="display:none;">
       <!-- 提醒横幅 -->
@@ -347,7 +416,7 @@
 <div id="modalOverlay" class="modal-overlay" style="display:none;" onclick="if(event.target===this)closeModal()"><div class="modal" id="modalContent"></div></div>
 <div id="toastContainer"></div>
 
-<script src="app.js?v=3.0" onerror="document.getElementById('jsLoadError').style.display='block'; console.error('app.js 加载失败，请检查服务器状态')"></script>
+<script src="app.js?v=3.1" onerror="document.getElementById('jsLoadError').style.display='block'; console.error('app.js 加载失败，请检查服务器状态')"></script>
 <div id="jsLoadError" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#1a1a2e;color:#e0e0e0;padding:30px;border-radius:12px;text-align:center;z-index:99999;border:2px solid #e94560;max-width:420px;">
   <div style="font-size:48px;margin-bottom:16px;">⚠️</div>
   <h2 style="color:#e94560;margin-bottom:12px;">脚本加载失败</h2>

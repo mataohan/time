@@ -196,7 +196,13 @@ const API = {
   // ---- 碳循环 ----
   getCarbon: () => API.get('/api/carbon'),
   createCarbon: (b) => API.post('/api/carbon', b),
-  getCarbonToday: () => API.get('/api/carbon/today')
+  getCarbonToday: () => API.get('/api/carbon/today'),
+
+  // ---- 华住会间夜 ----
+  getHotels: () => API.get('/api/hotels'),
+  createHotel: (b) => API.post('/api/hotels', b),
+  deleteHotel: (id) => API.del('/api/hotels/' + id),
+  checkHotel: (name) => API.get('/api/hotels/check?hotel_name=' + encodeURIComponent(name))
 };
 
 // ==================== 全局状态 ====================
@@ -439,6 +445,7 @@ function switchTab(tab) {
     document.getElementById('petsTab').style.display = 'none';
     document.getElementById('carbonTab').style.display = 'none';
     document.getElementById('orthodonticTab').style.display = 'none';
+    document.getElementById('hotelsTab').style.display = 'none';
     loadDiaries();
   } else if (tab === 'tasks') {
     btns[1].classList.add('active');
@@ -449,6 +456,7 @@ function switchTab(tab) {
     document.getElementById('petsTab').style.display = 'none';
     document.getElementById('carbonTab').style.display = 'none';
     document.getElementById('orthodonticTab').style.display = 'none';
+    document.getElementById('hotelsTab').style.display = 'none';
     loadTasks();
   } else if (tab === 'expenses') {
     btns[2].classList.add('active');
@@ -458,6 +466,7 @@ function switchTab(tab) {
     document.getElementById('petsTab').style.display = 'none';
     document.getElementById('carbonTab').style.display = 'none';
     document.getElementById('orthodonticTab').style.display = 'none';
+    document.getElementById('hotelsTab').style.display = 'none';
     document.getElementById('expensesTab').style.display = 'block';
     initExpenses();
   } else if (tab === 'report') {
@@ -468,6 +477,7 @@ function switchTab(tab) {
     document.getElementById('petsTab').style.display = 'none';
     document.getElementById('carbonTab').style.display = 'none';
     document.getElementById('orthodonticTab').style.display = 'none';
+    document.getElementById('hotelsTab').style.display = 'none';
     document.getElementById('reportTab').style.display = 'block';
     initExpenseReport();
   } else if (tab === 'pets') {
@@ -478,6 +488,7 @@ function switchTab(tab) {
     document.getElementById('reportTab').style.display = 'none';
     document.getElementById('carbonTab').style.display = 'none';
     document.getElementById('orthodonticTab').style.display = 'none';
+    document.getElementById('hotelsTab').style.display = 'none';
     document.getElementById('petsTab').style.display = 'block';
     loadPets();
   } else if (tab === 'orthodontic') {
@@ -488,6 +499,7 @@ function switchTab(tab) {
     document.getElementById('reportTab').style.display = 'none';
     document.getElementById('petsTab').style.display = 'none';
     document.getElementById('carbonTab').style.display = 'none';
+    document.getElementById('hotelsTab').style.display = 'none';
     document.getElementById('orthodonticTab').style.display = 'block';
     initOrthodontic();
   } else if (tab === 'carbon') {
@@ -498,8 +510,20 @@ function switchTab(tab) {
     document.getElementById('reportTab').style.display = 'none';
     document.getElementById('petsTab').style.display = 'none';
     document.getElementById('orthodonticTab').style.display = 'none';
+    document.getElementById('hotelsTab').style.display = 'none';
     document.getElementById('carbonTab').style.display = 'block';
     initCarbonCycle();
+  } else if (tab === 'hotels') {
+    btns[7].classList.add('active');
+    document.getElementById('calendarTab').style.display = 'none';
+    document.getElementById('tasksTab').style.display = 'none';
+    document.getElementById('expensesTab').style.display = 'none';
+    document.getElementById('reportTab').style.display = 'none';
+    document.getElementById('petsTab').style.display = 'none';
+    document.getElementById('orthodonticTab').style.display = 'none';
+    document.getElementById('carbonTab').style.display = 'none';
+    document.getElementById('hotelsTab').style.display = 'block';
+    initHotels();
   }
 }
 
@@ -2786,5 +2810,326 @@ async function checkOrthoReminderOnStart() {
     }
   } catch (e) {
     // 静默失败，不影响主流程
+  }
+}
+
+// ==================== 华住会间夜 ====================
+var hotelsCache = []; // 入住记录缓存
+var hotelsCalendarYear, hotelsCalendarMonth;
+var hotelsMapByDate = {}; // 日期 → 酒店名称数组映射
+
+async function initHotels() {
+  var now = new Date();
+  hotelsCalendarYear = now.getFullYear();
+  hotelsCalendarMonth = now.getMonth() + 1;
+  await loadHotels();
+}
+
+async function loadHotels() {
+  try {
+    var result = await API.getHotels();
+    hotelsCache = result.stays || [];
+    buildHotelsDateMap();
+    renderHotelsStats();
+    renderHotelsCalendar();
+    renderHotelsList();
+  } catch (err) {
+    toast('加载入住记录失败: ' + err.message, 'error');
+  }
+}
+
+function buildHotelsDateMap() {
+  hotelsMapByDate = {};
+  for (var i = 0; i < hotelsCache.length; i++) {
+    var s = hotelsCache[i];
+    var date = normalizeDate(s.check_in_date);
+    if (!hotelsMapByDate[date]) hotelsMapByDate[date] = [];
+    hotelsMapByDate[date].push(s.hotel_name);
+  }
+}
+
+function renderHotelsStats() {
+  var totalNights = hotelsCache.length;
+  var lastStay = hotelsCache.length > 0 ? hotelsCache[0] : null;
+
+  // 计算当前可入住的酒店数量（按酒店名去重，不在冷却期内的）
+  var hotelNames = {};
+  var coolingHotels = {};
+  var today = new Date();
+  today.setHours(0, 0, 0, 0);
+  for (var i = 0; i < hotelsCache.length; i++) {
+    var s = hotelsCache[i];
+    hotelNames[s.hotel_name] = true;
+  }
+  // 对每个酒店检查是否在冷却期内
+  var availableCount = 0;
+  var names = Object.keys(hotelNames);
+  for (var n = 0; n < names.length; n++) {
+    var name = names[n];
+    // 找到该酒店最近一次入住
+    var latest = null;
+    for (var i = 0; i < hotelsCache.length; i++) {
+      if (hotelsCache[i].hotel_name === name) {
+        latest = hotelsCache[i];
+        break; // 缓存已按日期倒序排列
+      }
+    }
+    if (latest) {
+      var checkIn = new Date(normalizeDate(latest.check_in_date));
+      var coolingUntil = new Date(checkIn);
+      coolingUntil.setDate(coolingUntil.getDate() + 31);
+      if (today >= coolingUntil) {
+        availableCount++;
+      }
+    }
+  }
+
+  document.getElementById('hotelsTotalNights').textContent = totalNights + ' 次';
+  document.getElementById('hotelsLastStay').textContent = lastStay
+    ? (lastStay.hotel_name + ' (' + normalizeDate(lastStay.check_in_date) + ')')
+    : '—';
+  document.getElementById('hotelsAvailable').textContent = names.length > 0
+    ? availableCount + ' / ' + names.length
+    : '—';
+}
+
+function renderHotelsCalendar() {
+  var grid = document.getElementById('hotelsCalendarGrid');
+  var title = document.getElementById('hotelsCalendarTitle');
+  if (!grid) return;
+
+  if (!hotelsCalendarYear || !hotelsCalendarMonth) {
+    var now = new Date();
+    hotelsCalendarYear = now.getFullYear();
+    hotelsCalendarMonth = now.getMonth() + 1;
+  }
+
+  if (title) {
+    title.textContent = hotelsCalendarYear + '年 ' + hotelsCalendarMonth + '月';
+  }
+
+  var firstDay = new Date(hotelsCalendarYear, hotelsCalendarMonth - 1, 1);
+  var lastDay = new Date(hotelsCalendarYear, hotelsCalendarMonth, 0);
+  var totalDays = lastDay.getDate();
+  var startDow = firstDay.getDay();
+  var todayStr = formatDate(new Date());
+
+  var html = '<div class="hotels-weekday">日</div><div class="hotels-weekday">一</div><div class="hotels-weekday">二</div><div class="hotels-weekday">三</div><div class="hotels-weekday">四</div><div class="hotels-weekday">五</div><div class="hotels-weekday">六</div>';
+
+  for (var j = 0; j < startDow; j++) {
+    html += '<div class="hotels-day hotels-day-empty"></div>';
+  }
+
+  for (var d = 1; d <= totalDays; d++) {
+    var dateStr = hotelsCalendarYear + '-' + String(hotelsCalendarMonth).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+    var isToday = (dateStr === todayStr);
+    var hotelNamesOnDate = hotelsMapByDate[dateStr];
+    var hasCheckIn = hotelNamesOnDate && hotelNamesOnDate.length > 0;
+
+    var cls = 'hotels-day';
+    if (isToday) cls += ' hotels-day-today';
+    if (hasCheckIn) cls += ' hotels-day-checkin';
+
+    html += '<div class="' + cls + '"';
+    if (hasCheckIn) {
+      html += ' title="' + hotelNamesOnDate.join(', ') + '"';
+      html += ' onclick="showHotelDayDetail(\'' + dateStr + '\')" style="cursor:pointer;"';
+    }
+    html += '>';
+    html += '<span class="hotels-day-num">' + d + '</span>';
+    if (hasCheckIn) {
+      html += '<span class="hotels-day-dot">●</span>';
+    }
+    html += '</div>';
+  }
+
+  grid.innerHTML = html;
+}
+
+function showHotelDayDetail(dateStr) {
+  var names = hotelsMapByDate[dateStr] || [];
+  if (names.length === 0) return;
+  var nameList = names.map(function (n) { return '🏨 ' + n; }).join('<br>');
+  openCustomModal(
+    '<h3>📅 ' + dateStr + ' 入住记录</h3>' +
+    '<div style="padding:20px;background:var(--bg-input);border-radius:var(--radius-sm);font-size:16px;line-height:2;">' + nameList + '</div>' +
+    '<div class="modal-actions"><button class="btn-cancel" onclick="closeModal()">关闭</button></div>'
+  );
+}
+
+function hotelsPrevMonth() {
+  hotelsCalendarMonth--;
+  if (hotelsCalendarMonth < 1) { hotelsCalendarMonth = 12; hotelsCalendarYear--; }
+  renderHotelsCalendar();
+}
+
+function hotelsNextMonth() {
+  hotelsCalendarMonth++;
+  if (hotelsCalendarMonth > 12) { hotelsCalendarMonth = 1; hotelsCalendarYear++; }
+  renderHotelsCalendar();
+}
+
+function hotelsGoToToday() {
+  var now = new Date();
+  hotelsCalendarYear = now.getFullYear();
+  hotelsCalendarMonth = now.getMonth() + 1;
+  renderHotelsCalendar();
+}
+
+function renderHotelsList() {
+  var list = document.getElementById('hotelsList');
+  var countEl = document.getElementById('hotelsListCount');
+  if (!list) return;
+
+  countEl.textContent = '共 ' + hotelsCache.length + ' 条';
+
+  if (hotelsCache.length === 0) {
+    list.innerHTML = '<div class="empty-state"><div class="empty-icon">🏨</div><p>暂无入住记录</p></div>';
+    return;
+  }
+
+  var html = '';
+  for (var i = 0; i < hotelsCache.length; i++) {
+    var s = hotelsCache[i];
+    html += '<div class="hotels-list-item">';
+    html += '<div class="hotels-list-item-info">';
+    html += '<div class="hotels-list-item-name">🏨 ' + esc(s.hotel_name) + '</div>';
+    html += '<div class="hotels-list-item-date">📅 ' + normalizeDate(s.check_in_date) + '</div>';
+    html += '</div>';
+    html += '<button class="hotels-list-item-del" onclick="deleteHotelStay(' + s.id + ')" title="删除">🗑️</button>';
+    html += '</div>';
+  }
+  list.innerHTML = html;
+}
+
+async function openHotelCheckinModal() {
+  var todayStr = formatDate(new Date());
+  var html =
+    '<h3>🏨 记录入住</h3>' +
+    '<div class="modal-form-grid">' +
+    '<div class="form-group form-group-col"><label>酒店名称</label><input type="text" id="hHotelName" placeholder="如：全季酒店（北京国贸店）"></div>' +
+    '<div class="form-group form-group-col"><label>入住日期</label><input type="date" id="hCheckinDate" value="' + todayStr + '"></div>' +
+    '<div class="form-group form-group-full" id="hCheckWarning" style="display:none;padding:12px 16px;border-radius:8px;background:rgba(239,83,80,0.08);border:1px solid rgba(239,83,80,0.25);color:#ef5350;font-size:14px;"></div>' +
+    '<div class="modal-actions form-group-full">' +
+    '<button class="btn-cancel" onclick="closeModal()">取消</button>' +
+    '<button class="btn-submit" onclick="submitHotelCheckin()">提交入住</button>' +
+    '</div></div>';
+
+  openCustomModal(html);
+  setTimeout(function () {
+    var el = document.getElementById('hHotelName');
+    if (el) el.focus();
+  }, 100);
+
+  // 当酒店名称改变时，自动检查冷却期
+  var nameInput = document.getElementById('hHotelName');
+  if (nameInput) {
+    nameInput.addEventListener('input', function () {
+      autoCheckHotel(nameInput.value.trim());
+    });
+  }
+}
+
+async function autoCheckHotel(name) {
+  var warningEl = document.getElementById('hCheckWarning');
+  if (!warningEl || !name) {
+    if (warningEl) warningEl.style.display = 'none';
+    return;
+  }
+
+  try {
+    var result = await API.checkHotel(name);
+    if (!result.exists) {
+      warningEl.style.display = 'none';
+    } else if (!result.can_check_in) {
+      warningEl.style.display = 'block';
+      warningEl.textContent = '⚠️ 该酒店在冷却期内（剩余 ' + result.days_remaining + ' 天），无法入住';
+    } else {
+      warningEl.style.display = 'block';
+      warningEl.style.background = 'rgba(76,175,80,0.08)';
+      warningEl.style.borderColor = 'rgba(76,175,80,0.25)';
+      warningEl.style.color = '#4caf50';
+      warningEl.textContent = '✅ 冷却期已过，可以入住！';
+    }
+  } catch (e) {
+    // 静默处理
+  }
+}
+
+async function submitHotelCheckin() {
+  var hotelName = document.getElementById('hHotelName').value.trim();
+  var checkinDate = document.getElementById('hCheckinDate').value;
+
+  if (!hotelName) { toast('请输入酒店名称', 'error'); return; }
+  if (!checkinDate) { toast('请选择入住日期', 'error'); return; }
+
+  // 提交前再次检查冷却期
+  try {
+    var checkResult = await API.checkHotel(hotelName);
+    if (!checkResult.can_check_in) {
+      toast('该酒店在冷却期内（剩余 ' + checkResult.days_remaining + ' 天），无法入住', 'error');
+      return;
+    }
+  } catch (err) {
+    toast('检查酒店状态失败: ' + err.message, 'error');
+    return;
+  }
+
+  try {
+    await API.createHotel({ hotel_name: hotelName, check_in_date: checkinDate });
+    toast('入住记录已添加 🏨');
+    closeModal();
+    await loadHotels();
+  } catch (err) {
+    toast('添加失败: ' + err.message, 'error');
+  }
+}
+
+async function deleteHotelStay(id) {
+  if (!confirm('确定删除这条入住记录？')) return;
+  try {
+    await API.deleteHotel(id);
+    toast('入住记录已删除');
+    await loadHotels();
+  } catch (err) {
+    toast('删除失败: ' + err.message, 'error');
+  }
+}
+
+async function searchHotel() {
+  var input = document.getElementById('hotelSearchInput');
+  var resultEl = document.getElementById('hotelSearchResult');
+  var name = input.value.trim();
+
+  if (!name) { toast('请输入酒店名称', 'error'); return; }
+
+  try {
+    var result = await API.checkHotel(name);
+    resultEl.style.display = 'block';
+
+    if (!result.exists) {
+      resultEl.innerHTML = '<div class="hotels-search-result-item hotels-search-result-new">' +
+        '<div class="hotels-search-result-icon">✅</div>' +
+        '<div class="hotels-search-result-text">该酒店尚未入住过，可以预订！</div>' +
+        '</div>';
+      resultEl.style.background = 'rgba(76,175,80,0.08)';
+      resultEl.style.borderColor = 'rgba(76,175,80,0.25)';
+    } else if (result.can_check_in) {
+      resultEl.innerHTML = '<div class="hotels-search-result-item hotels-search-result-ok">' +
+        '<div class="hotels-search-result-icon">✅</div>' +
+        '<div class="hotels-search-result-text">最近入住：' + result.last_check_in + '，<span style="color:#4caf50;font-weight:600;">可入住</span></div>' +
+        '</div>';
+      resultEl.style.background = 'rgba(76,175,80,0.08)';
+      resultEl.style.borderColor = 'rgba(76,175,80,0.25)';
+    } else {
+      resultEl.innerHTML = '<div class="hotels-search-result-item hotels-search-result-cooling">' +
+        '<div class="hotels-search-result-icon">⏳</div>' +
+        '<div class="hotels-search-result-text">最近入住：' + result.last_check_in + '，<span style="color:#ef5350;font-weight:600;">剩余 ' + result.days_remaining + ' 天</span>（冷却期至 ' + result.cooling_until + '）</div>' +
+        '</div>';
+      resultEl.style.background = 'rgba(239,83,80,0.08)';
+      resultEl.style.borderColor = 'rgba(239,83,80,0.25)';
+    }
+  } catch (err) {
+    toast('查询失败: ' + err.message, 'error');
   }
 }

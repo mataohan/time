@@ -758,3 +758,105 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;bottom:0;background:
   .carbon-weekday{font-size:11px;padding:8px 2px}
   .carbon-calendar-nav button{padding:6px 10px;font-size:12px;min-height:34px}
 }
+
+/* ==================== 华住会间夜板块 ==================== */
+.hotels-section{display:flex;flex-direction:column;gap:20px}
+
+/* 统计卡片 */
+.hotels-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.hotels-stat-card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:20px 22px;display:flex;align-items:center;gap:14px;transition:var(--transition)}
+.hotels-stat-card:hover{border-color:var(--accent);box-shadow:0 4px 16px rgba(79,195,247,0.08)}
+.hotels-stat-icon{font-size:32px;flex-shrink:0}
+.hotels-stat-info{flex:1;min-width:0}
+.hotels-stat-label{font-size:13px;color:var(--text-secondary);margin-bottom:4px;font-weight:500}
+.hotels-stat-value{font-size:18px;font-weight:700;color:var(--text-primary);word-break:break-word}
+
+/* 工具栏 */
+.hotels-toolbar{display:flex;gap:12px;flex-wrap:wrap}
+.btn-hotels-primary{padding:12px 28px;background:linear-gradient(135deg,#5c6bc0,#3949ab);border:none;border-radius:22px;color:#fff;cursor:pointer;font-size:15px;font-weight:600;transition:var(--transition);min-height:44px}
+.btn-hotels-primary:hover{box-shadow:0 4px 15px rgba(92,107,192,0.35);transform:translateY(-1px)}
+
+/* 查询酒店卡片 */
+.hotels-search-card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:20px 24px}
+.hotels-search-label{font-size:15px;font-weight:600;color:var(--text-primary);margin-bottom:12px}
+.hotels-search-row{display:flex;gap:10px;align-items:center}
+.hotels-search-input{flex:1;padding:12px 18px;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text-primary);font-size:15px;outline:none;min-height:44px;transition:var(--transition)}
+.hotels-search-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-glow)}
+.hotels-search-input::placeholder{color:var(--text-muted)}
+.btn-hotels-search{padding:12px 28px;background:linear-gradient(135deg,var(--accent),var(--accent-3));border:none;border-radius:22px;color:#fff;cursor:pointer;font-size:15px;font-weight:600;transition:var(--transition);min-height:44px;white-space:nowrap}
+.btn-hotels-search:hover{box-shadow:0 4px 15px rgba(79,195,247,0.3);transform:translateY(-1px)}
+.hotels-search-result{margin-top:14px;padding:14px 18px;border-radius:var(--radius-sm);border:1px solid var(--border)}
+.hotels-search-result-item{display:flex;align-items:center;gap:10px;font-size:14px}
+.hotels-search-result-icon{font-size:20px;flex-shrink:0}
+.hotels-search-result-text{color:var(--text-primary);line-height:1.5}
+
+/* 日历容器 */
+.hotels-calendar{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:24px}
+.hotels-calendar-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px}
+.hotels-calendar-header h2{font-size:18px;color:var(--text-primary);margin:0}
+.hotels-calendar-nav{display:flex;align-items:center;gap:8px}
+.hotels-calendar-nav button{padding:8px 16px;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text-secondary);cursor:pointer;font-size:14px;transition:var(--transition);min-height:40px}
+.hotels-calendar-nav button:hover{border-color:var(--accent);color:var(--accent)}
+.hotels-calendar-title{font-size:16px;font-weight:600;color:var(--text-primary);min-width:120px;text-align:center}
+.hotels-calendar-nav .btn-today{width:auto;padding:8px 18px;border-radius:22px;font-size:14px;font-weight:600}
+
+/* 日历网格 */
+.hotels-calendar-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.hotels-weekday{padding:10px 4px;text-align:center;font-size:13px;font-weight:600;color:var(--text-secondary);text-transform:uppercase}
+.hotels-day{aspect-ratio:1;display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:var(--radius-sm);background:var(--bg-input);border:1px solid transparent;transition:var(--transition);position:relative;min-height:52px}
+.hotels-day-empty{background:transparent}
+.hotels-day-today{border-color:var(--accent);background:rgba(79,195,247,0.08)}
+.hotels-day-today .hotels-day-num{color:var(--accent);font-weight:700}
+.hotels-day-checkin{border-color:rgba(76,175,80,0.35);background:rgba(76,175,80,0.08)}
+.hotels-day-checkin:hover{border-color:#4caf50;box-shadow:0 2px 8px rgba(76,175,80,0.15);transform:scale(1.05)}
+.hotels-day-num{font-size:15px;font-weight:500;color:var(--text-primary)}
+.hotels-day-dot{font-size:12px;color:#4caf50;margin-top:2px;line-height:1}
+
+/* 列表视图 */
+.hotels-list-card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:24px}
+.hotels-list-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+.hotels-list-header h3{font-size:18px;color:var(--text-primary);margin:0}
+.hotels-list-count{font-size:14px;color:var(--text-muted)}
+.hotels-list{display:flex;flex-direction:column;gap:10px}
+.hotels-list-item{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius-sm);transition:var(--transition)}
+.hotels-list-item:hover{border-color:var(--border-accent)}
+.hotels-list-item-info{flex:1;min-width:0}
+.hotels-list-item-name{font-size:16px;font-weight:600;color:var(--text-primary);margin-bottom:4px}
+.hotels-list-item-date{font-size:14px;color:var(--text-secondary)}
+.hotels-list-item-del{padding:8px;background:transparent;border:none;color:var(--text-muted);cursor:pointer;font-size:18px;transition:var(--transition);min-width:44px;min-height:44px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0}
+.hotels-list-item-del:hover{color:var(--danger)}
+
+/* 华住会间夜响应式 */
+@media(max-width:768px){
+  .hotels-stats{grid-template-columns:repeat(2,1fr);gap:10px}
+  .hotels-stat-card{padding:14px 16px;gap:10px}
+  .hotels-stat-icon{font-size:26px}
+  .hotels-stat-value{font-size:16px}
+  .hotels-search-card{padding:16px}
+  .hotels-search-row{flex-direction:column;gap:8px}
+  .btn-hotels-search{width:100%}
+  .hotels-calendar{padding:16px 12px}
+  .hotels-calendar-header h2{font-size:16px}
+  .hotels-day{min-height:40px}
+  .hotels-day-num{font-size:13px}
+  .hotels-day-dot{font-size:10px}
+  .hotels-list-card{padding:16px}
+  .hotels-list-item{padding:12px 14px}
+  .hotels-list-item-name{font-size:15px}
+}
+@media(max-width:480px){
+  .hotels-stats{grid-template-columns:1fr 1fr;gap:8px}
+  .hotels-stat-card{padding:12px 14px;gap:8px}
+  .hotels-stat-icon{font-size:22px}
+  .hotels-stat-value{font-size:14px}
+  .hotels-stat-label{font-size:12px}
+  .hotels-calendar-grid{gap:2px}
+  .hotels-day{min-height:34px}
+  .hotels-day-num{font-size:12px}
+  .hotels-day-dot{font-size:9px}
+  .hotels-weekday{font-size:11px;padding:8px 2px}
+  .hotels-calendar-nav button{padding:6px 10px;font-size:12px;min-height:34px}
+  .hotels-search-card{padding:14px}
+  .hotels-search-label{font-size:14px}
+  .hotels-list-item-name{font-size:14px}
+}

@@ -180,6 +180,19 @@ async function initDB() {
     )
   `);
 
+  // v2.9 华住会间夜：创建 hotel_stays 表
+  await db.exec(`
+    CREATE TABLE IF NOT EXISTS hotel_stays (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      user_id INT NOT NULL,
+      hotel_name VARCHAR(100) NOT NULL,
+      check_in_date DATE NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `);
+
   console.log('✅ TiDB Cloud 表初始化完成');
 }
 
@@ -1020,6 +1033,103 @@ app.post('/api/carbon', authMiddleware, async (req, res) => {
   });
 });
 
+// ========== 华住会间夜路由 ==========
+
+// 获取用户所有入住记录（按 check_in_date 倒序）
+app.get('/api/hotels', authMiddleware, async (req, res) => {
+  const stays = await db.all(
+    'SELECT * FROM hotel_stays WHERE user_id = ? ORDER BY check_in_date DESC',
+    [req.userId]
+  );
+  res.json({ stays });
+});
+
+// 查询指定酒店的入住状态
+app.get('/api/hotels/check', authMiddleware, async (req, res) => {
+  const { hotel_name } = req.query;
+  if (!hotel_name || !hotel_name.trim()) {
+    return res.status(400).json({ error: '酒店名称不能为空' });
+  }
+
+  const name = hotel_name.trim();
+  // 获取该酒店最近一次入住记录
+  const lastStay = await db.get(
+    'SELECT * FROM hotel_stays WHERE user_id = ? AND hotel_name = ? ORDER BY check_in_date DESC LIMIT 1',
+    [req.userId, name]
+  );
+
+  if (!lastStay) {
+    return res.json({
+      exists: false,
+      last_check_in: null,
+      cooling_until: null,
+      days_remaining: null,
+      can_check_in: true
+    });
+  }
+
+  // 计算冷却期：从入住当天算起，第 31 天可以再次入住
+  // 例如 8月1日入住 → 8月1日到8月31日为冷却期，9月1日可以再次入住
+  const checkInDate = new Date(lastStay.check_in_date);
+  checkInDate.setHours(0, 0, 0, 0);
+  const coolingUntil = new Date(checkInDate);
+  coolingUntil.setDate(coolingUntil.getDate() + 31); // 第31天
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const diffMs = coolingUntil.getTime() - today.getTime();
+  const daysRemaining = Math.max(0, Math.ceil(diffMs / (1000 * 60 * 60 * 24)));
+  const canCheckIn = daysRemaining === 0;
+
+  res.json({
+    exists: true,
+    last_check_in: lastStay.check_in_date,
+    cooling_until: coolingUntil.toISOString().substring(0, 10),
+    days_remaining: daysRemaining,
+    can_check_in: canCheckIn
+  });
+});
+
+// 新增一条入住记录
+app.post('/api/hotels', authMiddleware, async (req, res) => {
+  const { hotel_name, check_in_date } = req.body;
+  if (!hotel_name || !hotel_name.trim()) {
+    return res.status(400).json({ error: '酒店名称不能为空' });
+  }
+  if (!check_in_date) {
+    return res.status(400).json({ error: '入住日期不能为空' });
+  }
+
+  const name = hotel_name.trim();
+  const safeDate = String(check_in_date).substring(0, 10);
+
+  // 检查同一用户同一日期是否已记录同一酒店
+  const existing = await db.get(
+    'SELECT * FROM hotel_stays WHERE user_id = ? AND hotel_name = ? AND check_in_date = ?',
+    [req.userId, name, safeDate]
+  );
+  if (existing) {
+    return res.status(400).json({ error: '该日期已记录过此酒店的入住，请勿重复添加' });
+  }
+
+  const stay = await db.insert(
+    'INSERT INTO hotel_stays (user_id, hotel_name, check_in_date) VALUES (?, ?, ?)',
+    [req.userId, name, safeDate]
+  );
+  res.json({ message: '入住记录已添加', stay });
+});
+
+// 删除一条入住记录
+app.delete('/api/hotels/:id', authMiddleware, async (req, res) => {
+  const changes = await db.change(
+    'DELETE FROM hotel_stays WHERE id = ? AND user_id = ?',
+    [req.params.id, req.userId]
+  );
+  if (changes === 0) return res.status(404).json({ error: '入住记录不存在' });
+  res.json({ message: '删除成功' });
+});
+
 // ========== 宠物档案路由 ==========
 
 // 获取当前用户所有宠物（含最近3条健康事件）
@@ -1191,7 +1301,7 @@ app.use((err, req, res, next) => {
 
 // ========== 启动 ==========
 console.log('========================================');
-console.log('   ⏰ 时间管理大师 v2.0');
+console.log('   ⏰ 时间管理大师 v2.1');
 console.log('========================================');
 console.log(`   环境: ${IS_PRODUCTION ? '生产 (Production)' : '开发 (Development)'}`);
 console.log(`   端口: ${PORT}`);
