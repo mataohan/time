@@ -1559,6 +1559,10 @@ function renderExpList(ds, expenses) {
 
 function openExpenseModal(id) {
   var expense = id ? expensesCache.find(function (e) { return e.id == id; }) : null;
+  // 如果在 expensesCache 中找不到（例如在账单查询页面打开编辑），从 reportCache 中查找
+  if (!expense && id) {
+    expense = reportCache.find(function (e) { return e.id == id; });
+  }
   var isEdit = !!expense;
   stopDraftAutoSave();
   modalDirty = false;
@@ -1620,6 +1624,10 @@ async function saveExpense(id) {
     renderExpList(date, list);
     renderExpCalendar();
     updateExpStats();
+    // 如果当前在账单查询页面，同步刷新
+    if (currentTab === 'report') {
+      loadExpenseReport();
+    }
   } catch (err) { toast(err.message, 'error'); }
 }
 
