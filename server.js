@@ -651,18 +651,18 @@ app.patch('/api/tasks/:id/toggle', authMiddleware, async (req, res) => {
 
 // ========== 记账路由 ==========
 
-// 获取消费记录（支持 year/month/day 灵活筛选，day 优先）
+// 获取消费记录（支持 year/month/date 灵活筛选，date 优先）
 app.get('/api/expenses', authMiddleware, async (req, res) => {
-  const { year, month, day, category, keyword, minAmount, maxAmount } = req.query;
+  const { year, month, date, category, keyword, minAmount, maxAmount } = req.query;
   let sql = 'SELECT * FROM expenses WHERE user_id = ?';
   const params = [req.userId];
 
-  // day 参数优先：如果提供了 day，忽略 year 和 month，直接按日期查询
-  if (day && day.trim()) {
+  // date 参数优先：如果提供了 date，忽略 year 和 month，直接按日期查询
+  if (date && date.trim()) {
     // 支持 YYYY-MM-DD 或纯数字日期
-    const dayStr = String(day).trim();
+    const dateStr = String(date).trim();
     sql += ' AND DATE(expense_date) = ?';
-    params.push(dayStr.substring(0, 10));
+    params.push(dateStr.substring(0, 10));
   } else {
     // year 和 month 的筛选
     const hasYear = year && year !== 'all' && year !== '';
@@ -706,7 +706,7 @@ app.get('/api/expenses', authMiddleware, async (req, res) => {
   sql += ' ORDER BY expense_date DESC, created_at DESC';
 
   // 调试日志
-  console.log(`[API] 接收参数: year=${year}, month=${month}, day=${day || '无'}, category=${category || '无'}, keyword=${keyword || '无'}, minAmount=${minAmount || '无'}, maxAmount=${maxAmount || '无'}`);
+  console.log(`[API] 接收参数: year=${year}, month=${month}, date=${date || '无'}, category=${category || '无'}, keyword=${keyword || '无'}, minAmount=${minAmount || '无'}, maxAmount=${maxAmount || '无'}`);
   console.log(`[API] SQL: ${sql}, params: [${params.join(', ')}]`);
 
   const expenses = await db.all(sql, params);
@@ -762,20 +762,13 @@ app.delete('/api/expenses/:id', authMiddleware, async (req, res) => {
   res.json({ message: '删除成功' });
 });
 
-// 记账统计：返回年总额、月总额、分类汇总
+// 记账统计：返回年总额、月总额、分类汇总（支持 date/year/month 灵活筛选）
 app.get('/api/expenses/stats', authMiddleware, async (req, res) => {
-  const { year, month, category, keyword, minAmount, maxAmount } = req.query;
-  const y = parseInt(year);
-  const m = parseInt(month);
-
-  if (!y || !m) {
-    return res.status(400).json({ error: 'year 和 month 参数必填' });
-  }
-
-  const catFilter = (category && category !== 'all') ? category : null;
-  console.log(`[API] 接收参数: year=${y}, month=${m}, category=${catFilter || '无'}, keyword=${keyword || '无'}, minAmount=${minAmount || '无'}, maxAmount=${maxAmount || '无'}`);
+  const { year, month, date, category, keyword, minAmount, maxAmount } = req.query;
 
   // 构建额外筛选条件
+  const catFilter = (category && category !== 'all') ? category : null;
+
   let extraSql = '';
   const extraParams = [];
 
@@ -799,20 +792,47 @@ app.get('/api/expenses/stats', authMiddleware, async (req, res) => {
     extraParams.push(parseFloat(maxAmount));
   }
 
-  // 年总额
-  const yearRow = await db.get(
-    'SELECT COALESCE(SUM(amount), 0) AS total FROM expenses WHERE user_id = ? AND YEAR(expense_date) = ?' + extraSql,
-    [req.userId, y, ...extraParams]
+  // 构建时间筛选条件
+  let timeSql = '';
+  const timeParams = [];
+
+  if (date && date.trim()) {
+    // 日期优先：精确到某一天
+    const dateStr = String(date).trim().substring(0, 10);
+    timeSql = ' AND DATE(expense_date) = ?';
+    timeParams.push(dateStr);
+    console.log(`[API Stats] date=${dateStr}, category=${catFilter || '无'}, keyword=${keyword || '无'}`);
+  } else {
+    const hasYear = year && year !== 'all' && year !== '';
+    const hasMonth = month && month !== 'all' && month !== '';
+
+    if (hasYear && hasMonth) {
+      timeSql = ' AND YEAR(expense_date) = ? AND MONTH(expense_date) = ?';
+      timeParams.push(parseInt(year), parseInt(month));
+    } else if (hasYear) {
+      timeSql = ' AND YEAR(expense_date) = ?';
+      timeParams.push(parseInt(year));
+    } else if (hasMonth) {
+      timeSql = ' AND MONTH(expense_date) = ?';
+      timeParams.push(parseInt(month));
+    }
+    // year 和 month 都为 'all'/空：不限制时间
+    console.log(`[API Stats] year=${year}, month=${month}, category=${catFilter || '无'}, keyword=${keyword || '无'}`);
+  }
+
+  const baseWhere = 'WHERE user_id = ?' + timeSql + extraSql;
+  const baseParams = [req.userId, ...timeParams, ...extraParams];
+
+  // 总金额（用于没有具体年月时的全量统计）
+  const allRow = await db.get(
+    'SELECT COALESCE(SUM(amount), 0) AS total FROM expenses ' + baseWhere,
+    baseParams
   );
-  // 月总额
-  const monthRow = await db.get(
-    'SELECT COALESCE(SUM(amount), 0) AS total FROM expenses WHERE user_id = ? AND YEAR(expense_date) = ? AND MONTH(expense_date) = ?' + extraSql,
-    [req.userId, y, m, ...extraParams]
-  );
+
   // 分类汇总
   const catRows = await db.all(
-    'SELECT category, COALESCE(SUM(amount), 0) AS total FROM expenses WHERE user_id = ? AND YEAR(expense_date) = ? AND MONTH(expense_date) = ?' + extraSql + ' GROUP BY category',
-    [req.userId, y, m, ...extraParams]
+    'SELECT category, COALESCE(SUM(amount), 0) AS total FROM expenses ' + baseWhere + ' GROUP BY category',
+    baseParams
   );
 
   const categories = {};
@@ -820,9 +840,37 @@ app.get('/api/expenses/stats', authMiddleware, async (req, res) => {
     categories[row.category] = row.total;
   }
 
+  // 如果筛选了具体日期，月总额和年总额等于该日总额
+  let yearTotal = allRow.total;
+  let monthTotal = allRow.total;
+
+  // 当有具体年月时，年总额和月总额分别计算
+  if (!date || !date.trim()) {
+    const hasYear = year && year !== 'all' && year !== '';
+    const hasMonth = month && month !== 'all' && month !== '';
+
+    if (hasYear && hasMonth) {
+      // 年总额
+      const yearRow = await db.get(
+        'SELECT COALESCE(SUM(amount), 0) AS total FROM expenses WHERE user_id = ? AND YEAR(expense_date) = ?' + extraSql,
+        [req.userId, parseInt(year), ...extraParams]
+      );
+      yearTotal = yearRow.total;
+      monthTotal = allRow.total; // monthTotal 即当前筛选结果
+    } else if (hasYear) {
+      yearTotal = allRow.total;
+      monthTotal = allRow.total;
+    } else if (hasMonth) {
+      yearTotal = allRow.total;
+      monthTotal = allRow.total;
+    }
+    // 都为 all：yearTotal 和 monthTotal 都等于全量总额
+  }
+  // date 模式：yearTotal 和 monthTotal 都等于当天总额
+
   res.json({
-    yearTotal: yearRow.total,
-    monthTotal: monthRow.total,
+    yearTotal: yearTotal,
+    monthTotal: monthTotal,
     categories
   });
 });

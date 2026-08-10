@@ -167,8 +167,18 @@ const API = {
   createExpense: (b) => API.post('/api/expenses', b),
   updateExpense: (id, b) => API.put('/api/expenses/' + id, b),
   deleteExpense: (id) => API.del('/api/expenses/' + id),
-  getExpenseStats: (year, month, category, keyword, minAmount, maxAmount) => {
-    var url = '/api/expenses/stats?year=' + year + '&month=' + month;
+  getExpenseStats: (year, month, date, category, keyword, minAmount, maxAmount) => {
+    var url;
+    if (date) {
+      // 日期优先
+      url = '/api/expenses/stats?date=' + encodeURIComponent(date);
+    } else {
+      // 构建年月参数
+      var parts = [];
+      if (year && year !== 'all') parts.push('year=' + year);
+      if (month && month !== 'all') parts.push('month=' + month);
+      url = '/api/expenses/stats?' + (parts.length > 0 ? parts.join('&') : '');
+    }
     if (category && category !== 'all') url += '&category=' + encodeURIComponent(category);
     if (keyword) url += '&keyword=' + encodeURIComponent(keyword);
     if (minAmount) url += '&minAmount=' + encodeURIComponent(minAmount);
@@ -1396,7 +1406,7 @@ async function loadExpenses() {
     // 构建查询参数：日期优先
     var params = {};
     if (expFilterDate) {
-      params.day = expFilterDate;
+      params.date = expFilterDate;
     } else {
       params.year = expYear;
       params.month = expMonth;
@@ -1939,17 +1949,18 @@ function initExpenseReport() {
   var ySel = document.getElementById('rptYear');
   var mSel = document.getElementById('rptMonth');
   var cSel = document.getElementById('rptCat');
+  var dEl = document.getElementById('rptDate');
   var cy = now.getFullYear();
   var cm = now.getMonth() + 1;
 
   if (ySel) {
-    ySel.innerHTML = '';
+    ySel.innerHTML = '<option value="all">全部年份</option>';
     for (var y = cy - 2; y <= cy + 1; y++) {
       ySel.innerHTML += '<option value="' + y + '" ' + (y === cy ? 'selected' : '') + '>' + y + '年</option>';
     }
   }
   if (mSel) {
-    mSel.innerHTML = '';
+    mSel.innerHTML = '<option value="all">全部月份</option>';
     for (var m = 1; m <= 12; m++) {
       mSel.innerHTML += '<option value="' + m + '" ' + (m === cm ? 'selected' : '') + '>' + m + '月</option>';
     }
@@ -1961,14 +1972,28 @@ function initExpenseReport() {
       cSel.innerHTML += '<option value="' + c + '">' + EXP_EMOJI[c] + ' ' + c + '</option>';
     }
   }
+  // 清空日期选择器
+  if (dEl) dEl.value = '';
   // 首次进入自动加载当前月数据
   loadExpenseReport();
+}
+
+// 日期选择器变化时，自动清空年/月为"全部"（因为日期优先）
+function onRptDateChange() {
+  var dEl = document.getElementById('rptDate');
+  if (dEl && dEl.value) {
+    var yEl = document.getElementById('rptYear');
+    var mEl = document.getElementById('rptMonth');
+    if (yEl) yEl.value = 'all';
+    if (mEl) mEl.value = 'all';
+  }
 }
 
 function resetReportFilter() {
   var now = new Date();
   document.getElementById('rptYear').value = now.getFullYear();
   document.getElementById('rptMonth').value = now.getMonth() + 1;
+  document.getElementById('rptDate').value = '';
   document.getElementById('rptCat').value = 'all';
   document.getElementById('rptKeyword').value = '';
   document.getElementById('rptMinAmount').value = '';
@@ -1979,20 +2004,29 @@ function resetReportFilter() {
 async function loadExpenseReport() {
   var yEl = document.getElementById('rptYear');
   var mEl = document.getElementById('rptMonth');
+  var dEl = document.getElementById('rptDate');
   var cEl = document.getElementById('rptCat');
   var kwEl = document.getElementById('rptKeyword');
   var minEl = document.getElementById('rptMinAmount');
   var maxEl = document.getElementById('rptMaxAmount');
-  var year = parseInt(yEl.value);
-  var month = parseInt(mEl.value);
+
+  var year = yEl ? yEl.value : '';
+  var month = mEl ? mEl.value : '';
+  var dateVal = dEl ? (dEl.value || '') : '';
   var cat = cEl ? (cEl.value || 'all') : 'all';
   var keyword = kwEl ? (kwEl.value || '').trim() : '';
   var minAmount = minEl ? minEl.value : '';
   var maxAmount = maxEl ? maxEl.value : '';
 
   try {
-    // 并行请求明细和统计
-    var params = { year: year, month: month };
+    // 构建查询参数：日期优先
+    var params = {};
+    if (dateVal) {
+      params.date = dateVal;
+    } else {
+      if (year && year !== 'all') params.year = year;
+      if (month && month !== 'all') params.month = month;
+    }
     if (cat && cat !== 'all') params.category = cat;
     if (keyword) params.keyword = keyword;
     if (minAmount) params.minAmount = minAmount;
@@ -2000,7 +2034,7 @@ async function loadExpenseReport() {
 
     var [expResult, stats] = await Promise.all([
       API.getExpenses(params),
-      API.getExpenseStats(year, month, cat, keyword, minAmount, maxAmount)
+      API.getExpenseStats(year, month, dateVal, cat, keyword, minAmount, maxAmount)
     ]);
 
     reportCache = (expResult.expenses || []).map(function(e) {
