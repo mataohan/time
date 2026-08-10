@@ -651,18 +651,34 @@ app.patch('/api/tasks/:id/toggle', authMiddleware, async (req, res) => {
 
 // ========== 记账路由 ==========
 
-// 获取消费记录（使用 YEAR/MONTH 函数精确筛选，避免字符串拼接日期边界问题）
+// 获取消费记录（支持 year/month/day 灵活筛选，day 优先）
 app.get('/api/expenses', authMiddleware, async (req, res) => {
-  const { year, month, category, keyword, minAmount, maxAmount } = req.query;
+  const { year, month, day, category, keyword, minAmount, maxAmount } = req.query;
   let sql = 'SELECT * FROM expenses WHERE user_id = ?';
   const params = [req.userId];
 
-  if (year && month) {
-    sql += ' AND YEAR(expense_date) = ? AND MONTH(expense_date) = ?';
-    params.push(parseInt(year), parseInt(month));
-  } else if (year) {
-    sql += ' AND YEAR(expense_date) = ?';
-    params.push(parseInt(year));
+  // day 参数优先：如果提供了 day，忽略 year 和 month，直接按日期查询
+  if (day && day.trim()) {
+    // 支持 YYYY-MM-DD 或纯数字日期
+    const dayStr = String(day).trim();
+    sql += ' AND DATE(expense_date) = ?';
+    params.push(dayStr.substring(0, 10));
+  } else {
+    // year 和 month 的筛选
+    const hasYear = year && year !== 'all' && year !== '';
+    const hasMonth = month && month !== 'all' && month !== '';
+
+    if (hasYear && hasMonth) {
+      sql += ' AND YEAR(expense_date) = ? AND MONTH(expense_date) = ?';
+      params.push(parseInt(year), parseInt(month));
+    } else if (hasYear) {
+      sql += ' AND YEAR(expense_date) = ?';
+      params.push(parseInt(year));
+    } else if (hasMonth) {
+      sql += ' AND MONTH(expense_date) = ?';
+      params.push(parseInt(month));
+    }
+    // year 和 month 都为 'all'/空：不限制时间
   }
 
   if (category && category !== 'all') {
@@ -690,7 +706,7 @@ app.get('/api/expenses', authMiddleware, async (req, res) => {
   sql += ' ORDER BY expense_date DESC, created_at DESC';
 
   // 调试日志
-  console.log(`[API] 接收参数: year=${year}, month=${month}, category=${category || '无'}, keyword=${keyword || '无'}, minAmount=${minAmount || '无'}, maxAmount=${maxAmount || '无'}`);
+  console.log(`[API] 接收参数: year=${year}, month=${month}, day=${day || '无'}, category=${category || '无'}, keyword=${keyword || '无'}, minAmount=${minAmount || '无'}, maxAmount=${maxAmount || '无'}`);
   console.log(`[API] SQL: ${sql}, params: [${params.join(', ')}]`);
 
   const expenses = await db.all(sql, params);

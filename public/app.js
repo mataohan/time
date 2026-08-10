@@ -231,7 +231,7 @@ const EXP_CATS = ['餐饮', '购物', '交通', '娱乐', '医疗', '其他', '�
 const EXP_EMOJI = { 餐饮: '🍜', 购物: '🛒', 交通: '🚗', 娱乐: '🎮', 医疗: '🏥', 其他: '📦', 爱车: '🚘', 路费: '🛣️', 住宿: '🏨' };
 const EXP_CSS = { 餐饮: 'dining', 购物: 'shopping', 交通: 'transport', 娱乐: 'entertainment', 医疗: 'medical', 其他: 'other', 爱车: 'car', 路费: 'toll', 住宿: 'lodging' };
 
-let expYear, expMonth, expSelectedDate, expFilterCat = 'all', expensesCache = [];
+let expYear, expMonth, expSelectedDate, expFilterCat = 'all', expFilterDate = '', expensesCache = [];
 
 // 箍牙提醒相关变量
 let orthoRecord = null;
@@ -1244,8 +1244,9 @@ async function saveCompletionNote(id) {
 // ==================== 记账 ====================
 function initExpenses() {
   var now = new Date();
-  expYear = now.getFullYear();
-  expMonth = now.getMonth() + 1;
+  expYear = String(now.getFullYear());
+  expMonth = String(now.getMonth() + 1);
+  expFilterDate = '';
   expSelectedDate = today();
   populateExpMonthPicker();
   populateExpFilterBar();
@@ -1260,13 +1261,13 @@ function populateExpMonthPicker() {
   if (ySel) {
     ySel.innerHTML = '';
     for (var y = cy - 2; y <= cy + 1; y++) {
-      ySel.innerHTML += '<option value="' + y + '" ' + (y === expYear ? 'selected' : '') + '>' + y + '年</option>';
+      ySel.innerHTML += '<option value="' + y + '" ' + (String(y) === String(expYear) ? 'selected' : '') + '>' + y + '年</option>';
     }
   }
   if (mSel) {
     mSel.innerHTML = '';
     for (var m = 1; m <= 12; m++) {
-      mSel.innerHTML += '<option value="' + m + '" ' + (m === expMonth ? 'selected' : '') + '>' + m + '月</option>';
+      mSel.innerHTML += '<option value="' + m + '" ' + (String(m) === String(expMonth) ? 'selected' : '') + '>' + m + '月</option>';
     }
   }
 }
@@ -1284,18 +1285,19 @@ function populateExpFilterBar() {
   var ySel = document.getElementById('expFilterYear');
   var mSel = document.getElementById('expFilterMonth');
   var cSel = document.getElementById('expFilterCat');
+  var dEl = document.getElementById('expFilterDate');
   var now = new Date();
   var cy = now.getFullYear();
   if (ySel) {
-    ySel.innerHTML = '';
+    ySel.innerHTML = '<option value="all">全部年份</option>';
     for (var y = cy - 2; y <= cy + 1; y++) {
-      ySel.innerHTML += '<option value="' + y + '" ' + (y === expYear ? 'selected' : '') + '>' + y + '年</option>';
+      ySel.innerHTML += '<option value="' + y + '" ' + (String(y) === String(expYear) ? 'selected' : '') + '>' + y + '年</option>';
     }
   }
   if (mSel) {
-    mSel.innerHTML = '';
+    mSel.innerHTML = '<option value="all">全部月份</option>';
     for (var m = 1; m <= 12; m++) {
-      mSel.innerHTML += '<option value="' + m + '" ' + (m === expMonth ? 'selected' : '') + '>' + m + '月</option>';
+      mSel.innerHTML += '<option value="' + m + '" ' + (String(m) === String(expMonth) ? 'selected' : '') + '>' + m + '月</option>';
     }
   }
   if (cSel) {
@@ -1305,33 +1307,70 @@ function populateExpFilterBar() {
       cSel.innerHTML += '<option value="' + c + '" ' + (expFilterCat === c ? 'selected' : '') + '>' + EXP_EMOJI[c] + ' ' + c + '</option>';
     }
   }
+  // 同步日期选择器
+  if (dEl && expFilterDate) {
+    dEl.value = expFilterDate;
+  } else if (dEl) {
+    dEl.value = '';
+  }
 }
 
-// 筛选栏查询按钮：从筛选栏读取年/月/分类并加载数据
+// 筛选栏查询按钮：从筛选栏读取年/月/日期/分类并加载数据
 function queryExpenses() {
   var yEl = document.getElementById('expFilterYear');
   var mEl = document.getElementById('expFilterMonth');
+  var dEl = document.getElementById('expFilterDate');
   var cEl = document.getElementById('expFilterCat');
-  if (yEl && mEl) {
-    expYear = parseInt(yEl.value);
-    expMonth = parseInt(mEl.value);
+
+  // 日期输入框优先
+  if (dEl && dEl.value) {
+    expFilterDate = dEl.value;
+  } else {
+    expFilterDate = '';
   }
+
+  if (yEl) expYear = yEl.value;
+  if (mEl) expMonth = mEl.value;
   if (cEl) {
     expFilterCat = cEl.value || 'all';
   }
-  // 同步顶部统计栏的年月选择器
-  populateExpMonthPicker();
-  // 清除选中日期（跨月后旧日期可能不在当前月）
+
+  // 同步顶部统计栏的年月选择器（仅当有具体年月时）
+  if (!expFilterDate && expYear !== 'all' && expMonth !== 'all') {
+    // 同步整数年月到顶部选择器
+    var py = parseInt(expYear);
+    var pm = parseInt(expMonth);
+    var pySel = document.getElementById('expYearSelect');
+    var pmSel = document.getElementById('expMonthSelect');
+    if (pySel) pySel.value = py;
+    if (pmSel) pmSel.value = pm;
+    populateExpMonthPicker(); // 刷新顶部选择器以反映当前值
+  }
+
+  // 清除选中日期（筛选条件改变后旧日期可能不在结果中）
   expSelectedDate = null;
   loadExpenses();
 }
 
-// 重置筛选条件：恢复默认（当年当月、全部分类）
+// 日期选择器变化时，自动清空年/月为"全部"（因为日期优先）
+function onExpFilterDateChange() {
+  var dEl = document.getElementById('expFilterDate');
+  if (dEl && dEl.value) {
+    // 日期有值时，年月设为"全部"以提示用户日期优先
+    var yEl = document.getElementById('expFilterYear');
+    var mEl = document.getElementById('expFilterMonth');
+    if (yEl) yEl.value = 'all';
+    if (mEl) mEl.value = 'all';
+  }
+}
+
+// 重置筛选条件：恢复默认（当年当月、全部分类、清空日期）
 function resetExpFilter() {
   var now = new Date();
-  expYear = now.getFullYear();
-  expMonth = now.getMonth() + 1;
+  expYear = String(now.getFullYear());
+  expMonth = String(now.getMonth() + 1);
   expFilterCat = 'all';
+  expFilterDate = '';
   expSelectedDate = today();
   populateExpMonthPicker();
   populateExpFilterBar();
@@ -1346,12 +1385,22 @@ function syncFilterBarFromPicker() {
   if (fy) fy.value = expYear;
   if (fm) fm.value = expMonth;
   if (fc) fc.value = expFilterCat;
+  // 顶部选择器变更时清除日期筛选
+  expFilterDate = '';
+  var dEl = document.getElementById('expFilterDate');
+  if (dEl) dEl.value = '';
 }
 
 async function loadExpenses() {
   try {
-    // 确保 year/month 是整数类型，URLSearchParams 会正确序列化
-    var params = { year: parseInt(expYear), month: parseInt(expMonth) };
+    // 构建查询参数：日期优先
+    var params = {};
+    if (expFilterDate) {
+      params.day = expFilterDate;
+    } else {
+      params.year = expYear;
+      params.month = expMonth;
+    }
     if (expFilterCat && expFilterCat !== 'all') params.category = expFilterCat;
     var result = await API.getExpenses(params);
     expensesCache = (result.expenses || []).map(function (e) {
@@ -1362,7 +1411,7 @@ async function loadExpenses() {
     updateExpStats();
     if (expSelectedDate) {
       var parts = expSelectedDate.split('-');
-      if (parseInt(parts[0]) === expYear && parseInt(parts[1]) === expMonth) {
+      if (parseInt(parts[0]) === parseInt(expYear) && parseInt(parts[1]) === parseInt(expMonth)) {
         selectExpDate(expSelectedDate);
       } else {
         expSelectedDate = null;
