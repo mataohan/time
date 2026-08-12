@@ -1889,7 +1889,9 @@ async function deleteHealthEvent(petId, eventId) {
 // 从后端 stats API 获取年/月总额，回退到客户端计算
 async function loadExpStats() {
   try {
-    var stats = await API.getExpenseStats(expYear, expMonth, expFilterCat);
+    // 注意：getExpenseStats 签名是 (year, month, date, category, ...)
+    // 第三个参数是 date（日期），第四个参数才是 category
+    var stats = await API.getExpenseStats(expYear, expMonth, expFilterDate || '', expFilterCat);
     // 确保是数字
     var yt = Number(stats.yearTotal) || 0;
     var mt = Number(stats.monthTotal) || 0;
