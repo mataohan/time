@@ -868,10 +868,26 @@ app.get('/api/expenses/stats', authMiddleware, async (req, res) => {
   }
   // date 模式：yearTotal 和 monthTotal 都等于当天总额
 
+  // 调试：返回满足当月条件的记录数，帮助排查 "统计为0" 问题
+  const countRow = await db.get(
+    'SELECT COUNT(*) AS cnt FROM expenses ' + baseWhere,
+    baseParams
+  );
+
   res.json({
     yearTotal: yearTotal,
     monthTotal: monthTotal,
-    categories
+    categories,
+    _debug: {
+      userId: req.userId,
+      year: year,
+      month: month,
+      date: date || null,
+      timeSql: timeSql,
+      timeParams: timeParams,
+      matchedCount: countRow ? countRow.cnt : 0,
+      baseParams: baseParams
+    }
   });
 });
 
