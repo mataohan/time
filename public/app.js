@@ -169,11 +169,13 @@ const API = {
   deleteExpense: (id) => API.del('/api/expenses/' + id),
   getExpenseStats: (year, month, date, category, keyword, minAmount, maxAmount) => {
     var url;
-    if (date) {
+    // 只有 date 是真正的日期（非空、非 'all'）时才按日期优先查询
+    var isDate = date && date !== 'all' && String(date).trim();
+    if (isDate) {
       // 日期优先
       url = '/api/expenses/stats?date=' + encodeURIComponent(date);
     } else {
-      // 构建年月参数
+      // 构建年月参数（year/month 为 'all' 或空时忽略，实现"全部"）
       var parts = [];
       if (year && year !== 'all') parts.push('year=' + year);
       if (month && month !== 'all') parts.push('month=' + month);
@@ -1403,13 +1405,13 @@ function syncFilterBarFromPicker() {
 
 async function loadExpenses() {
   try {
-    // 构建查询参数：日期优先
+    // 构建查询参数：日期优先（date 为 'all' 或空时视为无日期筛选）
     var params = {};
-    if (expFilterDate) {
+    if (expFilterDate && expFilterDate !== 'all') {
       params.date = expFilterDate;
     } else {
-      params.year = expYear;
-      params.month = expMonth;
+      if (expYear && expYear !== 'all') params.year = expYear;
+      if (expMonth && expMonth !== 'all') params.month = expMonth;
     }
     if (expFilterCat && expFilterCat !== 'all') params.category = expFilterCat;
     var result = await API.getExpenses(params);
@@ -2029,9 +2031,9 @@ async function loadExpenseReport() {
   var maxAmount = maxEl ? maxEl.value : '';
 
   try {
-    // 构建查询参数：日期优先
+    // 构建查询参数：日期优先（date 为 'all' 或空时视为无日期筛选）
     var params = {};
-    if (dateVal) {
+    if (dateVal && dateVal !== 'all') {
       params.date = dateVal;
     } else {
       if (year && year !== 'all') params.year = year;

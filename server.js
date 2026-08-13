@@ -796,7 +796,8 @@ app.get('/api/expenses/stats', authMiddleware, async (req, res) => {
   let timeSql = '';
   const timeParams = [];
 
-  if (date && date.trim()) {
+  // date 为 'all' 或空时视为无日期筛选（避免 DATE(expense_date)='all' 查询不到记录）
+  if (date && date !== 'all' && date.trim()) {
     // 日期优先：精确到某一天
     const dateStr = String(date).trim().substring(0, 10);
     timeSql = ' AND DATE(expense_date) = ?';
@@ -845,7 +846,7 @@ app.get('/api/expenses/stats', authMiddleware, async (req, res) => {
   let monthTotal = allRow.total;
 
   // 当有具体年月时，年总额和月总额分别计算
-  if (!date || !date.trim()) {
+  if (!date || date === 'all' || !date.trim()) {
     const hasYear = year && year !== 'all' && year !== '';
     const hasMonth = month && month !== 'all' && month !== '';
 
