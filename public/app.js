@@ -1893,13 +1893,35 @@ async function loadExpStats() {
   try {
     // 注意：getExpenseStats 签名是 (year, month, date, category, ...)
     // 第三个参数是 date（日期），第四个参数才是 category
-    var stats = await API.getExpenseStats(expYear, expMonth, expFilterDate || '', expFilterCat);
+    var cat = expFilterCat;
+    var date = expFilterDate || '';
+    // year/month 可能是具体值、'all' 或空，统一归一化为 null（不传，表示“全部”）
+    var yParam = (expYear !== undefined && expYear !== null && expYear !== '' && expYear !== 'all') ? expYear : null;
+    var mParam = (expMonth !== undefined && expMonth !== null && expMonth !== '' && expMonth !== 'all') ? expMonth : null;
+
+    // 分别调用两次接口，得到两个维度的统计：
+    //  - 年度总额：只传年份（month=null），后端返回该年所有月份总和
+    //  - 月度总额：传 year+month，后端返回该年该月总和
+    var yearStats, monthStats;
+    if (date && date !== 'all') {
+      // 已选择具体日期：两者都按该日期统计
+      yearStats = await API.getExpenseStats(null, null, date, cat);
+      monthStats = yearStats;
+    } else {
+      var results = await Promise.all([
+        API.getExpenseStats(yParam, null, date, cat),
+        API.getExpenseStats(yParam, mParam, date, cat)
+      ]);
+      yearStats = results[0];
+      monthStats = results[1];
+    }
+
     // 确保是数字
-    var yt = Number(stats.yearTotal) || 0;
-    var mt = Number(stats.monthTotal) || 0;
+    var yt = Number(yearStats.yearTotal) || 0;
+    var mt = Number(monthStats.monthTotal) || 0;
     var el;
-    el = document.getElementById('expYearLabel'); if (el) el.textContent = expYear;
-    el = document.getElementById('expMonthLabel'); if (el) el.textContent = expMonth;
+    el = document.getElementById('expYearLabel'); if (el) el.textContent = yParam === null ? '全部' : expYear;
+    el = document.getElementById('expMonthLabel'); if (el) el.textContent = mParam === null ? '全部' : expMonth;
     el = document.getElementById('expYearTotal'); if (el) el.textContent = '¥ ' + yt.toFixed(2);
     el = document.getElementById('expMonthTotal'); if (el) el.textContent = '¥ ' + mt.toFixed(2);
   } catch (err) {
