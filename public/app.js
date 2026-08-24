@@ -3074,31 +3074,25 @@ function renderHotelsCalendar() {
     html += '<div class="' + cls + '" onclick="openHotelDayModal(\'' + dateStr + '\')" style="cursor:pointer;" title="' + (hasCheckIn ? ('当天入住 ' + stays.length + ' 家酒店，点击查看管理') : '点击查看当天入住记录') + '">';
     html += '<span class="hotels-day-num">' + d + '</span>';
     if (hasCheckIn) {
-      // 总积分：只统计当天开始入住的记录（延续记录不重复计积分）
-      var totalPoints = 0;
-      var hasStartToday = false;
-      for (var p = 0; p < stays.length; p++) {
-        if (normalizeDate(stays[p].start_date) === dateStr) {
-          totalPoints += parseInt(stays[p].points, 10) || 0;
-          hasStartToday = true;
-        }
-      }
-      // 酒店名称摘要：每条前置不同颜色小圆点；延续记录（非起始日）加“续”标记
+      // 每条记录单独一行：起始日显示酒店名 + 积分 + 到账状态（✓/✗）；连住延续日显示“续”标记，不重复计积分
       var shown = Math.min(stays.length, maxShown);
       for (var i = 0; i < shown; i++) {
         var st = stays[i];
         var isStart = normalizeDate(st.start_date) === dateStr;
+        var pts = parseInt(st.points, 10) || 0;
         html += '<span class="hotels-day-hotel-row" title="' + esc(st.hotel_name) + '">';
         html += '<span class="hotels-day-dot' + (st.is_credited ? ' hotels-day-dot-credited' : '') + '" style="background:' + hotelsDotColors[i % hotelsDotColors.length] + '"></span>';
         html += '<span class="hotels-day-hotel">' + esc(st.hotel_name) + '</span>';
-        if (!isStart) html += '<span class="hotels-day-cont">续</span>';
+        if (isStart) {
+          html += '<span class="hotels-day-pts' + (st.is_credited ? '' : ' hotels-day-pts-uncredited') + '">' + pts + '分</span>';
+          html += '<span class="hotels-day-cred' + (st.is_credited ? ' hotels-day-cred-yes' : '') + '">' + (st.is_credited ? '✓' : '✗') + '</span>';
+        } else {
+          html += '<span class="hotels-day-cont">续</span>';
+        }
         if (i === maxShown - 1 && stays.length > maxShown) {
           html += '<span class="hotels-day-more">+' + (stays.length - maxShown) + '</span>';
         }
         html += '</span>';
-      }
-      if (hasStartToday) {
-        html += '<span class="hotels-day-total' + (totalPoints > 0 ? '' : ' hotels-day-total-zero') + '">共 ' + totalPoints + ' 分</span>';
       }
     }
     html += '</div>';
