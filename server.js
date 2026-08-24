@@ -53,9 +53,39 @@ async function columnExists(table, column) {
   return rows.length > 0;
 }
 
-// 日期字符串加 N 天（UTC 安全，无时区偏移），返回 'YYYY-MM-DD'
+// 获取指定列的类型（sqlite: PRAGMA / tidb: SHOW COLUMNS），不存在返回 null
+async function getColumnType(table, column) {
+  if (db.type() === 'sqlite') {
+    const rows = await db.all(`PRAGMA table_info(${table})`);
+    for (const r of rows) if (r.name === column) return r.type || null;
+    return null;
+  }
+  const rows = await db.all(`SHOW COLUMNS FROM ${table} LIKE '${column}'`);
+  return rows.length > 0 ? (rows[0].Type || rows[0].type || '') : null;
+}
+
+// 将各种来源的日期值（mysql2 的 Date 对象 / ISO 字符串 / 'YYYY-MM-DD'）统一转为 'YYYY-MM-DD'，无效返回 ''
+function toDateStr(v) {
+  if (v === null || v === undefined || v === '') return '';
+  if (v instanceof Date) {
+    if (isNaN(v.getTime())) return '';
+    const y = v.getFullYear();
+    const m = String(v.getMonth() + 1).padStart(2, '0');
+    const d = String(v.getDate()).padStart(2, '0');
+    return y + '-' + m + '-' + d;
+  }
+  const s = String(v);
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m ? m[1] + '-' + m[2] + '-' + m[3] : '';
+}
+
+// 日期加 N 天（UTC 安全，无时区偏移），返回 'YYYY-MM-DD'；无效输入抛明确错误
 function addDaysDate(dateStr, days) {
-  const d = new Date(String(dateStr).substring(0, 10) + 'T00:00:00Z');
+  const ds = toDateStr(dateStr);
+  if (!ds) {
+    throw new Error('无效的日期值: ' + String(dateStr));
+  }
+  const d = new Date(ds + 'T00:00:00Z');
   d.setUTCDate(d.getUTCDate() + days);
   return d.toISOString().substring(0, 10);
 }
@@ -256,6 +286,17 @@ async function initDB() {
     }
   } catch (e) {
     console.warn('[INIT] hotel_stays 迁移跳过:', e.message);
+  }
+
+  // v3.4 校验 start_date 列类型：若为字符串类型则迁移为 DATE（TiDB）
+  try {
+    const colType = await getColumnType('hotel_stays', 'start_date');
+    if (colType && !/date/i.test(colType) && db.type() !== 'sqlite') {
+      await db.exec('ALTER TABLE hotel_stays MODIFY COLUMN start_date DATE');
+      console.log('[INIT] hotel_stays.start_date 已从 ' + colType + ' 迁移为 DATE');
+    }
+  } catch (e) {
+    console.warn('[INIT] start_date 列类型迁移跳过:', e.message);
   }
 
   console.log(`✅ 数据库表初始化完成 (${process.env.DATABASE_URL ? 'TiDB Cloud' : 'SQLite'})`);
@@ -1187,6 +1228,10 @@ app.get('/api/hotels', authMiddleware, async (req, res) => {
     'SELECT * FROM hotel_stays WHERE user_id = ? ORDER BY start_date DESC',
     [req.userId]
   );
+  // 统一 start_date 为 'YYYY-MM-DD' 字符串，避免 TiDB 返回 Date 对象导致时区偏移
+  for (const s of stays) {
+    s.start_date = toDateStr(s.start_date);
+  }
   res.json({ stays });
 });
 
@@ -1218,7 +1263,7 @@ app.get('/api/hotels/check', authMiddleware, async (req, res) => {
   // 冷却期以 start_date 为基准：start_date + 31 天为冷却期最后一天（含），
   // start_date + 32 天之后才可以再次入住。
   // 例如 2026-08-01 入住 → 冷却期至 2026-09-01（含），2026-09-02 可再次入住。
-  const startStr = String(lastStay.start_date).substring(0, 10);
+  const startStr = toDateStr(lastStay.start_date);
   const coolingUntilStr = addDaysDate(startStr, 31);
   const nextAvailableStr = addDaysDate(startStr, 32);
   const todayS = todayStr();
@@ -1245,8 +1290,10 @@ async function checkHotelOverlap(userId, name, startDate, duration, excludeId) {
     : await db.all('SELECT * FROM hotel_stays WHERE user_id = ? AND hotel_name = ?', [userId, name]);
   const newEnd = addDaysDate(startDate, duration - 1);
   for (const es of existingStays) {
-    const esEnd = addDaysDate(es.start_date, (es.duration || 1) - 1);
-    if (startDate <= esEnd && newEnd >= String(es.start_date).substring(0, 10)) {
+    const esStart = toDateStr(es.start_date);
+    if (!esStart) continue; // 跳过无效的旧数据
+    const esEnd = addDaysDate(esStart, (es.duration || 1) - 1);
+    if (startDate <= esEnd && newEnd >= esStart) {
       return true;
     }
   }
@@ -1265,7 +1312,10 @@ app.post('/api/hotels', authMiddleware, async (req, res) => {
     }
 
     const name = hotel_name.trim();
-    const safeDate = String(start_date).substring(0, 10);
+    const safeDate = toDateStr(start_date);
+    if (!safeDate) {
+      return res.status(400).json({ error: '入住日期格式无效，应为 YYYY-MM-DD' });
+    }
     const dur = Math.max(1, parseInt(duration, 10) || 1);
     if (dur > 30) {
       return res.status(400).json({ error: '连住天数不能超过 30 天' });
@@ -1283,6 +1333,7 @@ app.post('/api/hotels', authMiddleware, async (req, res) => {
       'INSERT INTO hotel_stays (user_id, hotel_name, start_date, duration, points, is_credited, notes) VALUES (?, ?, ?, ?, ?, ?, ?)',
       [req.userId, name, safeDate, dur, pts, credited, note]
     );
+    if (stay) stay.start_date = toDateStr(stay.start_date);
     res.json({ message: '入住记录已添加', stay });
   } catch (err) {
     console.error('[HOTELS] POST /api/hotels 服务器错误:', err.message, err.stack);
@@ -1301,7 +1352,10 @@ app.put('/api/hotels/:id', authMiddleware, async (req, res) => {
 
     const { hotel_name, start_date, duration, points, is_credited, notes } = req.body;
     const newName = hotel_name !== undefined && hotel_name !== '' ? String(hotel_name).trim() : stay.hotel_name;
-    const newStart = start_date !== undefined && start_date !== '' ? String(start_date).substring(0, 10) : String(stay.start_date).substring(0, 10);
+    const newStart = toDateStr(start_date !== undefined && start_date !== '' ? start_date : stay.start_date);
+    if (!newStart) {
+      return res.status(400).json({ error: '入住日期格式无效，应为 YYYY-MM-DD' });
+    }
     const newDur = duration !== undefined && duration !== '' ? Math.max(1, parseInt(duration, 10) || 1) : (stay.duration || 1);
     if (newDur > 30) {
       return res.status(400).json({ error: '连住天数不能超过 30 天' });
@@ -1339,6 +1393,7 @@ app.put('/api/hotels/:id', authMiddleware, async (req, res) => {
       'SELECT * FROM hotel_stays WHERE id = ? AND user_id = ?',
       [req.params.id, req.userId]
     );
+    if (updated) updated.start_date = toDateStr(updated.start_date);
     res.json({ message: '入住记录已更新', stay: updated });
   } catch (err) {
     console.error('[HOTELS] PUT /api/hotels/:id 服务器错误:', err.message, err.stack);
