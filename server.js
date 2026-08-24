@@ -187,13 +187,21 @@ async function initDB() {
       user_id INT NOT NULL,
       hotel_name VARCHAR(100) NOT NULL,
       check_in_date DATE NOT NULL,
+      points INT DEFAULT 0,
+      is_credited BOOLEAN DEFAULT 0,
+      notes TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     )
   `);
 
-  console.log('✅ TiDB Cloud 表初始化完成');
+  // v3.1 华住会间夜增强：为已有表补充 积分 / 是否到账 / 备注 字段（兼容旧数据）
+  try { await db.exec("ALTER TABLE hotel_stays ADD COLUMN points INT DEFAULT 0"); } catch (e) { /* 已存在 */ }
+  try { await db.exec("ALTER TABLE hotel_stays ADD COLUMN is_credited BOOLEAN DEFAULT 0"); } catch (e) { /* 已存在 */ }
+  try { await db.exec("ALTER TABLE hotel_stays ADD COLUMN notes TEXT"); } catch (e) { /* 已存在 */ }
+
+  console.log(`✅ 数据库表初始化完成 (${process.env.DATABASE_URL ? 'TiDB Cloud' : 'SQLite'})`);
 }
 
 // ========== JWT 认证中间件 ==========
@@ -1174,7 +1182,7 @@ app.get('/api/hotels/check', authMiddleware, async (req, res) => {
 
 // 新增一条入住记录
 app.post('/api/hotels', authMiddleware, async (req, res) => {
-  const { hotel_name, check_in_date } = req.body;
+  const { hotel_name, check_in_date, points, is_credited, notes } = req.body;
   if (!hotel_name || !hotel_name.trim()) {
     return res.status(400).json({ error: '酒店名称不能为空' });
   }
@@ -1184,6 +1192,9 @@ app.post('/api/hotels', authMiddleware, async (req, res) => {
 
   const name = hotel_name.trim();
   const safeDate = String(check_in_date).substring(0, 10);
+  const pts = points !== undefined && points !== '' && points !== null ? (parseInt(points, 10) || 0) : 0;
+  const credited = is_credited ? 1 : 0;
+  const note = notes !== undefined ? String(notes) : '';
 
   // 检查同一用户同一日期是否已记录同一酒店
   const existing = await db.get(
@@ -1195,10 +1206,48 @@ app.post('/api/hotels', authMiddleware, async (req, res) => {
   }
 
   const stay = await db.insert(
-    'INSERT INTO hotel_stays (user_id, hotel_name, check_in_date) VALUES (?, ?, ?)',
-    [req.userId, name, safeDate]
+    'INSERT INTO hotel_stays (user_id, hotel_name, check_in_date, points, is_credited, notes) VALUES (?, ?, ?, ?, ?, ?)',
+    [req.userId, name, safeDate, pts, credited, note]
   );
   res.json({ message: '入住记录已添加', stay });
+});
+
+// 编辑一条入住记录（修改 积分 / 是否到账 / 备注 等字段）
+app.put('/api/hotels/:id', authMiddleware, async (req, res) => {
+  const stay = await db.get(
+    'SELECT * FROM hotel_stays WHERE id = ? AND user_id = ?',
+    [req.params.id, req.userId]
+  );
+  if (!stay) return res.status(404).json({ error: '入住记录不存在' });
+
+  const { hotel_name, check_in_date, points, is_credited, notes } = req.body;
+  const pts = points !== undefined && points !== '' && points !== null ? (parseInt(points, 10) || 0) : (stay.points || 0);
+
+  await db.change(
+    `UPDATE hotel_stays SET
+       hotel_name = ?,
+       check_in_date = ?,
+       points = ?,
+       is_credited = ?,
+       notes = ?,
+       updated_at = CURRENT_TIMESTAMP
+     WHERE id = ? AND user_id = ?`,
+    [
+      hotel_name !== undefined && hotel_name !== '' ? String(hotel_name).trim() : stay.hotel_name,
+      check_in_date !== undefined && check_in_date !== '' ? String(check_in_date).substring(0, 10) : stay.check_in_date,
+      pts,
+      is_credited !== undefined ? (is_credited ? 1 : 0) : (stay.is_credited ? 1 : 0),
+      notes !== undefined ? String(notes) : (stay.notes || ''),
+      req.params.id,
+      req.userId
+    ]
+  );
+
+  const updated = await db.get(
+    'SELECT * FROM hotel_stays WHERE id = ? AND user_id = ?',
+    [req.params.id, req.userId]
+  );
+  res.json({ message: '入住记录已更新', stay: updated });
 });
 
 // 删除一条入住记录
@@ -1386,8 +1435,8 @@ console.log('   ⏰ 时间管理大师 v2.1');
 console.log('========================================');
 console.log(`   环境: ${IS_PRODUCTION ? '生产 (Production)' : '开发 (Development)'}`);
 console.log(`   端口: ${PORT}`);
-console.log(`   数据库类型: TiDB Cloud (MySQL)`);
-console.log(`   DATABASE_URL 已配置: ${process.env.DATABASE_URL ? '✅ 是' : '❌ 否'}`);
+console.log(`   数据库类型: ${process.env.DATABASE_URL ? 'TiDB Cloud (MySQL)' : 'SQLite (本地 time_master.db)'}`);
+console.log(`   DATABASE_URL 已配置: ${process.env.DATABASE_URL ? '✅ 是' : '❌ 否 (使用本地 SQLite)'}`);
 if (!process.env.JWT_SECRET) {
   console.warn('   ⚠️ 警告: JWT_SECRET 环境变量未设置！');
   console.warn('   ⚠️ 将使用默认值 "time_master_secret_2025"');
@@ -1413,10 +1462,14 @@ db.init().then(() => {
   console.error('========================================');
   console.error('❌ 启动失败:', err.message);
   console.error('   可能原因:');
-  console.error('   1. DATABASE_URL 环境变量未设置或格式错误');
-  console.error('   2. TiDB Cloud 集群未启动或网络不通');
-  console.error('   3. 数据库用户名/密码错误');
-  console.error('   4. IP 白名单未配置 (需在 TiDB Cloud 中添加 Render 出口 IP)');
+  if (process.env.DATABASE_URL) {
+    console.error('   1. DATABASE_URL 环境变量格式错误');
+    console.error('   2. TiDB Cloud 集群未启动或网络不通');
+    console.error('   3. 数据库用户名/密码错误');
+    console.error('   4. IP 白名单未配置 (需在 TiDB Cloud 中添加 Render 出口 IP)');
+  } else {
+    console.error('   1. 本地 SQLite 文件 (time_master.db) 创建失败，请检查目录写入权限');
+  }
   console.error('========================================');
   process.exit(1);
 });

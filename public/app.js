@@ -213,6 +213,7 @@ const API = {
   // ---- 华住会间夜 ----
   getHotels: () => API.get('/api/hotels'),
   createHotel: (b) => API.post('/api/hotels', b),
+  updateHotel: (id, b) => API.put('/api/hotels/' + id, b),
   deleteHotel: (id) => API.del('/api/hotels/' + id),
   checkHotel: (name) => API.get('/api/hotels/check?hotel_name=' + encodeURIComponent(name))
 };
@@ -2933,7 +2934,7 @@ async function checkOrthoReminderOnStart() {
 // ==================== 华住会间夜 ====================
 var hotelsCache = []; // 入住记录缓存
 var hotelsCalendarYear, hotelsCalendarMonth;
-var hotelsMapByDate = {}; // 日期 → 酒店名称数组映射
+var hotelsMapByDate = {}; // 日期 → 入住记录对象数组映射
 
 async function initHotels() {
   var now = new Date();
@@ -2961,7 +2962,7 @@ function buildHotelsDateMap() {
     var s = hotelsCache[i];
     var date = normalizeDate(s.check_in_date);
     if (!hotelsMapByDate[date]) hotelsMapByDate[date] = [];
-    hotelsMapByDate[date].push(s.hotel_name);
+    hotelsMapByDate[date].push(s);
   }
 }
 
@@ -3049,7 +3050,7 @@ function renderHotelsCalendar() {
 
     html += '<div class="' + cls + '"';
     if (hasCheckIn) {
-      html += ' title="' + hotelNamesOnDate.join(', ') + '"';
+      html += ' title="' + hotelNamesOnDate.map(function (x) { return x.hotel_name; }).join(', ') + '"';
       html += ' onclick="showHotelDayDetail(\'' + dateStr + '\')" style="cursor:pointer;"';
     }
     html += '>';
@@ -3064,14 +3065,28 @@ function renderHotelsCalendar() {
 }
 
 function showHotelDayDetail(dateStr) {
-  var names = hotelsMapByDate[dateStr] || [];
-  if (names.length === 0) return;
-  var nameList = names.map(function (n) { return '🏨 ' + n; }).join('<br>');
-  openCustomModal(
-    '<h3>📅 ' + dateStr + ' 入住记录</h3>' +
-    '<div style="padding:20px;background:var(--bg-input);border-radius:var(--radius-sm);font-size:16px;line-height:2;">' + nameList + '</div>' +
-    '<div class="modal-actions"><button class="btn-cancel" onclick="closeModal()">关闭</button></div>'
-  );
+  var stays = hotelsMapByDate[dateStr] || [];
+  if (stays.length === 0) return;
+
+  var html = '<h3>📅 ' + dateStr + ' 入住记录</h3>';
+  for (var i = 0; i < stays.length; i++) {
+    var s = stays[i];
+    var pts = parseInt(s.points, 10) || 0;
+    html += '<div class="hotels-day-detail-card">';
+    html += '<div class="hotels-day-detail-name">🏨 ' + esc(s.hotel_name) + '</div>';
+    html += '<div class="hotels-day-detail-meta">';
+    html += '<span class="hotels-day-detail-points">⭐ ' + (pts > 0 ? pts + ' 积分' : '无积分') + '</span>';
+    html += s.is_credited
+      ? '<span class="hotel-credit-status hotel-credit-yes">✓ 已到账</span>'
+      : '<span class="hotel-credit-status hotel-credit-no">✗ 未到账</span>';
+    html += '</div>';
+    if (s.notes) {
+      html += '<div class="hotels-day-detail-notes">📝 ' + esc(s.notes) + '</div>';
+    }
+    html += '</div>';
+  }
+  html += '<div class="modal-actions"><button class="btn-cancel" onclick="closeModal()">关闭</button></div>';
+  openCustomModal(html);
 }
 
 function hotelsPrevMonth() {
@@ -3108,12 +3123,27 @@ function renderHotelsList() {
   var html = '';
   for (var i = 0; i < hotelsCache.length; i++) {
     var s = hotelsCache[i];
+    var pts = parseInt(s.points, 10) || 0;
     html += '<div class="hotels-list-item">';
     html += '<div class="hotels-list-item-info">';
     html += '<div class="hotels-list-item-name">🏨 ' + esc(s.hotel_name) + '</div>';
     html += '<div class="hotels-list-item-date">📅 ' + normalizeDate(s.check_in_date) + '</div>';
+    html += '<div class="hotels-list-item-meta">';
+    html += pts > 0
+      ? '<span class="hotels-list-item-points">⭐ ' + pts + ' 积分</span>'
+      : '<span class="hotels-list-item-points hotels-list-item-nopoints">无积分</span>';
+    html += s.is_credited
+      ? '<span class="hotel-credit-status hotel-credit-yes">✓ 已到账</span>'
+      : '<span class="hotel-credit-status hotel-credit-no">✗ 未到账</span>';
     html += '</div>';
+    if (s.notes) {
+      html += '<div class="hotels-list-item-notes">📝 ' + esc(s.notes) + '</div>';
+    }
+    html += '</div>';
+    html += '<div class="hotels-list-item-actions">';
+    html += '<button class="hotels-list-item-edit" onclick="openHotelEditModal(' + s.id + ')" title="编辑">✏️</button>';
     html += '<button class="hotels-list-item-del" onclick="deleteHotelStay(' + s.id + ')" title="删除">🗑️</button>';
+    html += '</div>';
     html += '</div>';
   }
   list.innerHTML = html;
@@ -3126,6 +3156,12 @@ async function openHotelCheckinModal() {
     '<div class="modal-form-grid">' +
     '<div class="form-group form-group-col"><label>酒店名称</label><input type="text" id="hHotelName" placeholder="如：全季酒店（北京国贸店）"></div>' +
     '<div class="form-group form-group-col"><label>入住日期</label><input type="date" id="hCheckinDate" value="' + todayStr + '"></div>' +
+    '<div class="form-group form-group-col"><label>积分与到账</label>' +
+    '<div class="hotel-points-credit-row">' +
+    '<input type="number" id="hPoints" min="0" placeholder="0" aria-label="积分数量">' +
+    '<label class="hotel-checkbox-inline" title="积分是否已到账"><input type="checkbox" id="hCredited"> 已到账</label>' +
+    '</div></div>' +
+    '<div class="form-group form-group-full"><label>备注（可选）</label><textarea id="hNotes" class="hotels-notes-input" rows="2" placeholder="如：华住会App预订，含早餐"></textarea></div>' +
     '<div class="form-group form-group-full" id="hCheckWarning" style="display:none;padding:12px 16px;border-radius:8px;background:rgba(239,83,80,0.08);border:1px solid rgba(239,83,80,0.25);color:#ef5350;font-size:14px;"></div>' +
     '<div class="modal-actions form-group-full">' +
     '<button class="btn-cancel" onclick="closeModal()">取消</button>' +
@@ -3176,6 +3212,12 @@ async function autoCheckHotel(name) {
 async function submitHotelCheckin() {
   var hotelName = document.getElementById('hHotelName').value.trim();
   var checkinDate = document.getElementById('hCheckinDate').value;
+  var pointsEl = document.getElementById('hPoints');
+  var creditedEl = document.getElementById('hCredited');
+  var notesEl = document.getElementById('hNotes');
+  var points = pointsEl ? pointsEl.value : '';
+  var isCredited = creditedEl ? creditedEl.checked : false;
+  var notes = notesEl ? notesEl.value : '';
 
   if (!hotelName) { toast('请输入酒店名称', 'error'); return; }
   if (!checkinDate) { toast('请选择入住日期', 'error'); return; }
@@ -3193,7 +3235,13 @@ async function submitHotelCheckin() {
   }
 
   try {
-    await API.createHotel({ hotel_name: hotelName, check_in_date: checkinDate });
+    await API.createHotel({
+      hotel_name: hotelName,
+      check_in_date: checkinDate,
+      points: points,
+      is_credited: isCredited,
+      notes: notes
+    });
     toast('入住记录已添加 🏨');
     closeModal();
     await loadHotels();
@@ -3210,6 +3258,53 @@ async function deleteHotelStay(id) {
     await loadHotels();
   } catch (err) {
     toast('删除失败: ' + err.message, 'error');
+  }
+}
+
+// 编辑入住记录：复用新增表单结构，填充现有数据
+function openHotelEditModal(id) {
+  var stay = null;
+  for (var i = 0; i < hotelsCache.length; i++) {
+    if (hotelsCache[i].id == id) { stay = hotelsCache[i]; break; }
+  }
+  if (!stay) { toast('记录不存在', 'error'); return; }
+
+  var pts = parseInt(stay.points, 10) || 0;
+  var creditedChecked = stay.is_credited ? ' checked' : '';
+  var html =
+    '<h3>✏️ 编辑入住记录</h3>' +
+    '<div class="modal-form-grid">' +
+    '<div class="form-group form-group-col"><label>酒店名称</label><input type="text" value="' + esc(stay.hotel_name) + '" disabled></div>' +
+    '<div class="form-group form-group-col"><label>入住日期</label><input type="date" value="' + normalizeDate(stay.check_in_date) + '" disabled></div>' +
+    '<div class="form-group form-group-col"><label>积分与到账</label>' +
+    '<div class="hotel-points-credit-row">' +
+    '<input type="number" id="hPoints" min="0" value="' + pts + '" aria-label="积分数量">' +
+    '<label class="hotel-checkbox-inline" title="积分是否已到账"><input type="checkbox" id="hCredited"' + creditedChecked + '> 已到账</label>' +
+    '</div></div>' +
+    '<div class="form-group form-group-full"><label>备注（可选）</label><textarea id="hNotes" class="hotels-notes-input" rows="2" placeholder="如：华住会App预订，含早餐">' + esc(stay.notes || '') + '</textarea></div>' +
+    '<div class="modal-actions form-group-full">' +
+    '<button class="btn-cancel" onclick="closeModal()">取消</button>' +
+    '<button class="btn-submit" onclick="submitHotelEdit(' + stay.id + ')">保存修改</button>' +
+    '</div></div>';
+
+  openCustomModal(html);
+}
+
+async function submitHotelEdit(id) {
+  var pointsEl = document.getElementById('hPoints');
+  var creditedEl = document.getElementById('hCredited');
+  var notesEl = document.getElementById('hNotes');
+  var points = pointsEl ? pointsEl.value : '';
+  var isCredited = creditedEl ? creditedEl.checked : false;
+  var notes = notesEl ? notesEl.value : '';
+
+  try {
+    await API.updateHotel(id, { points: points, is_credited: isCredited, notes: notes });
+    toast('入住记录已更新 ✏️');
+    closeModal();
+    await loadHotels();
+  } catch (err) {
+    toast('更新失败: ' + err.message, 'error');
   }
 }
 

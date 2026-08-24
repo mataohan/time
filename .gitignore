@@ -4,6 +4,8 @@ node_modules/
 # 本地数据库文件（生产数据在 TiDB Cloud）
 *.db
 *.db-journal
+*.db-shm
+*.db-wal
 *.sqlite
 *.sqlite3
 
