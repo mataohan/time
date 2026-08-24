@@ -225,9 +225,13 @@ async function initDB() {
   `);
 
   // v3.1 华住会间夜增强：为已有表补充 积分 / 是否到账 / 备注 字段（兼容旧数据）
-  try { await db.exec("ALTER TABLE hotel_stays ADD COLUMN points INT DEFAULT 0"); } catch (e) { /* 已存在 */ }
-  try { await db.exec("ALTER TABLE hotel_stays ADD COLUMN is_credited BOOLEAN DEFAULT 0"); } catch (e) { /* 已存在 */ }
-  try { await db.exec("ALTER TABLE hotel_stays ADD COLUMN notes TEXT"); } catch (e) { /* 已存在 */ }
+  try {
+    if (!(await columnExists('hotel_stays', 'points'))) await db.exec('ALTER TABLE hotel_stays ADD COLUMN points INT DEFAULT 0');
+    if (!(await columnExists('hotel_stays', 'is_credited'))) await db.exec('ALTER TABLE hotel_stays ADD COLUMN is_credited BOOLEAN DEFAULT 0');
+    if (!(await columnExists('hotel_stays', 'notes'))) await db.exec('ALTER TABLE hotel_stays ADD COLUMN notes TEXT');
+  } catch (e) {
+    console.warn('[INIT] hotel_stays 补充字段失败（请检查表结构）:', e.message);
+  }
 
   // v3.3 华住会连住：check_in_date → start_date + duration 迁移（已有数据 duration=1）
   try {
@@ -235,7 +239,9 @@ async function initDB() {
     const hasStart = await columnExists('hotel_stays', 'start_date');
     if (hasCheckIn && !hasStart) {
       await db.exec('ALTER TABLE hotel_stays ADD COLUMN start_date DATE');
-      await db.exec('ALTER TABLE hotel_stays ADD COLUMN duration INT NOT NULL DEFAULT 1');
+      if (!(await columnExists('hotel_stays', 'duration'))) {
+        await db.exec('ALTER TABLE hotel_stays ADD COLUMN duration INT NOT NULL DEFAULT 1');
+      }
       await db.run('UPDATE hotel_stays SET start_date = check_in_date, duration = 1 WHERE start_date IS NULL');
       try {
         await db.exec('ALTER TABLE hotel_stays DROP COLUMN check_in_date');
@@ -243,6 +249,10 @@ async function initDB() {
         console.warn('[INIT] 无法删除 check_in_date 列（忽略）:', e.message);
       }
       console.log('[INIT] hotel_stays 已迁移为 start_date + duration 结构');
+    } else if (!(await columnExists('hotel_stays', 'duration'))) {
+      // 兜底：已有 start_date 但缺 duration 列
+      await db.exec('ALTER TABLE hotel_stays ADD COLUMN duration INT NOT NULL DEFAULT 1');
+      console.log('[INIT] hotel_stays 已补充 duration 列');
     }
   } catch (e) {
     console.warn('[INIT] hotel_stays 迁移跳过:', e.message);
@@ -1245,85 +1255,95 @@ async function checkHotelOverlap(userId, name, startDate, duration, excludeId) {
 
 // 新增一条入住记录（支持连住：start_date + duration）
 app.post('/api/hotels', authMiddleware, async (req, res) => {
-  const { hotel_name, start_date, duration, points, is_credited, notes } = req.body;
-  if (!hotel_name || !hotel_name.trim()) {
-    return res.status(400).json({ error: '酒店名称不能为空' });
-  }
-  if (!start_date) {
-    return res.status(400).json({ error: '入住日期不能为空' });
-  }
+  try {
+    const { hotel_name, start_date, duration, points, is_credited, notes } = req.body;
+    if (!hotel_name || !hotel_name.trim()) {
+      return res.status(400).json({ error: '酒店名称不能为空' });
+    }
+    if (!start_date) {
+      return res.status(400).json({ error: '入住日期不能为空' });
+    }
 
-  const name = hotel_name.trim();
-  const safeDate = String(start_date).substring(0, 10);
-  const dur = Math.max(1, parseInt(duration, 10) || 1);
-  if (dur > 30) {
-    return res.status(400).json({ error: '连住天数不能超过 30 天' });
-  }
-  const pts = points !== undefined && points !== '' && points !== null ? (parseInt(points, 10) || 0) : 0;
-  const credited = is_credited ? 1 : 0;
-  const note = notes !== undefined ? String(notes) : '';
+    const name = hotel_name.trim();
+    const safeDate = String(start_date).substring(0, 10);
+    const dur = Math.max(1, parseInt(duration, 10) || 1);
+    if (dur > 30) {
+      return res.status(400).json({ error: '连住天数不能超过 30 天' });
+    }
+    const pts = points !== undefined && points !== '' && points !== null ? (parseInt(points, 10) || 0) : 0;
+    const credited = is_credited ? 1 : 0;
+    const note = notes !== undefined ? String(notes) : '';
 
-  // 检查同一时间段（含连住区间）是否已记录同一酒店
-  if (await checkHotelOverlap(req.userId, name, safeDate, dur)) {
-    return res.status(400).json({ error: '该时间段已记录过此酒店的入住，请勿重复添加' });
-  }
+    // 检查同一时间段（含连住区间）是否已记录同一酒店
+    if (await checkHotelOverlap(req.userId, name, safeDate, dur)) {
+      return res.status(400).json({ error: '该时间段已记录过此酒店的入住，请勿重复添加' });
+    }
 
-  const stay = await db.insert(
-    'INSERT INTO hotel_stays (user_id, hotel_name, start_date, duration, points, is_credited, notes) VALUES (?, ?, ?, ?, ?, ?, ?)',
-    [req.userId, name, safeDate, dur, pts, credited, note]
-  );
-  res.json({ message: '入住记录已添加', stay });
+    const stay = await db.insert(
+      'INSERT INTO hotel_stays (user_id, hotel_name, start_date, duration, points, is_credited, notes) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [req.userId, name, safeDate, dur, pts, credited, note]
+    );
+    res.json({ message: '入住记录已添加', stay });
+  } catch (err) {
+    console.error('[HOTELS] POST /api/hotels 服务器错误:', err.message, err.stack);
+    res.status(500).json({ error: '服务器错误: ' + err.message });
+  }
 });
 
 // 编辑一条入住记录（可修改 起始日期 / 连住天数 / 积分 / 是否到账 / 备注）
 app.put('/api/hotels/:id', authMiddleware, async (req, res) => {
-  const stay = await db.get(
-    'SELECT * FROM hotel_stays WHERE id = ? AND user_id = ?',
-    [req.params.id, req.userId]
-  );
-  if (!stay) return res.status(404).json({ error: '入住记录不存在' });
+  try {
+    const stay = await db.get(
+      'SELECT * FROM hotel_stays WHERE id = ? AND user_id = ?',
+      [req.params.id, req.userId]
+    );
+    if (!stay) return res.status(404).json({ error: '入住记录不存在' });
 
-  const { hotel_name, start_date, duration, points, is_credited, notes } = req.body;
-  const newName = hotel_name !== undefined && hotel_name !== '' ? String(hotel_name).trim() : stay.hotel_name;
-  const newStart = start_date !== undefined && start_date !== '' ? String(start_date).substring(0, 10) : String(stay.start_date).substring(0, 10);
-  const newDur = duration !== undefined && duration !== '' ? Math.max(1, parseInt(duration, 10) || 1) : (stay.duration || 1);
-  if (newDur > 30) {
-    return res.status(400).json({ error: '连住天数不能超过 30 天' });
+    const { hotel_name, start_date, duration, points, is_credited, notes } = req.body;
+    const newName = hotel_name !== undefined && hotel_name !== '' ? String(hotel_name).trim() : stay.hotel_name;
+    const newStart = start_date !== undefined && start_date !== '' ? String(start_date).substring(0, 10) : String(stay.start_date).substring(0, 10);
+    const newDur = duration !== undefined && duration !== '' ? Math.max(1, parseInt(duration, 10) || 1) : (stay.duration || 1);
+    if (newDur > 30) {
+      return res.status(400).json({ error: '连住天数不能超过 30 天' });
+    }
+    const pts = points !== undefined && points !== '' && points !== null ? (parseInt(points, 10) || 0) : (stay.points || 0);
+
+    // 检查与同酒店其他记录的时间段重叠（排除自身）
+    if (await checkHotelOverlap(req.userId, newName, newStart, newDur, req.params.id)) {
+      return res.status(400).json({ error: '该时间段已记录过此酒店的入住，请勿重复添加' });
+    }
+
+    await db.change(
+      `UPDATE hotel_stays SET
+         hotel_name = ?,
+         start_date = ?,
+         duration = ?,
+         points = ?,
+         is_credited = ?,
+         notes = ?,
+         updated_at = CURRENT_TIMESTAMP
+       WHERE id = ? AND user_id = ?`,
+      [
+        newName,
+        newStart,
+        newDur,
+        pts,
+        is_credited !== undefined ? (is_credited ? 1 : 0) : (stay.is_credited ? 1 : 0),
+        notes !== undefined ? String(notes) : (stay.notes || ''),
+        req.params.id,
+        req.userId
+      ]
+    );
+
+    const updated = await db.get(
+      'SELECT * FROM hotel_stays WHERE id = ? AND user_id = ?',
+      [req.params.id, req.userId]
+    );
+    res.json({ message: '入住记录已更新', stay: updated });
+  } catch (err) {
+    console.error('[HOTELS] PUT /api/hotels/:id 服务器错误:', err.message, err.stack);
+    res.status(500).json({ error: '服务器错误: ' + err.message });
   }
-  const pts = points !== undefined && points !== '' && points !== null ? (parseInt(points, 10) || 0) : (stay.points || 0);
-
-  // 检查与同酒店其他记录的时间段重叠（排除自身）
-  if (await checkHotelOverlap(req.userId, newName, newStart, newDur, req.params.id)) {
-    return res.status(400).json({ error: '该时间段已记录过此酒店的入住，请勿重复添加' });
-  }
-
-  await db.change(
-    `UPDATE hotel_stays SET
-       hotel_name = ?,
-       start_date = ?,
-       duration = ?,
-       points = ?,
-       is_credited = ?,
-       notes = ?,
-       updated_at = CURRENT_TIMESTAMP
-     WHERE id = ? AND user_id = ?`,
-    [
-      newName,
-      newStart,
-      newDur,
-      pts,
-      is_credited !== undefined ? (is_credited ? 1 : 0) : (stay.is_credited ? 1 : 0),
-      notes !== undefined ? String(notes) : (stay.notes || ''),
-      req.params.id,
-      req.userId
-    ]
-  );
-
-  const updated = await db.get(
-    'SELECT * FROM hotel_stays WHERE id = ? AND user_id = ?',
-    [req.params.id, req.userId]
-  );
-  res.json({ message: '入住记录已更新', stay: updated });
 });
 
 // 删除一条入住记录
@@ -1503,6 +1523,11 @@ app.get('*', (req, res) => {
 app.use((err, req, res, next) => {
   console.error(`[ERROR] 未捕获异常:`, err.message, err.stack);
   res.status(500).json({ error: '服务器内部错误' });
+});
+
+// 兜底：捕获未处理的 Promise rejection，避免进程崩溃导致 Render 返回 503
+process.on('unhandledRejection', (reason) => {
+  console.error('[FATAL] 未处理的 Promise rejection（已阻止进程退出）:', reason instanceof Error ? (reason.stack || reason.message) : reason);
 });
 
 // ========== 启动 ==========
