@@ -302,17 +302,7 @@
 
       <!-- 操作栏 -->
       <div class="hotels-toolbar">
-        <button class="btn-hotels-primary" onclick="openHotelCheckinModal()">+ 记录入住</button>
-      </div>
-
-      <!-- 查询酒店区域 -->
-      <div class="hotels-search-card">
-        <div class="hotels-search-label">🔍 查询酒店冷却期状态</div>
-        <div class="hotels-search-row">
-          <input type="text" id="hotelSearchInput" class="hotels-search-input" placeholder="输入酒店名称..." onkeydown="if(event.key==='Enter')searchHotel()">
-          <button class="btn-hotels-search" onclick="searchHotel()">查询</button>
-        </div>
-        <div class="hotels-search-result" id="hotelSearchResult" style="display:none;"></div>
+        <button class="btn-hotels-primary" onclick="openHotelFormModal()">+ 记录入住</button>
       </div>
 
       <!-- 日历视图 -->
@@ -327,18 +317,20 @@
           </div>
         </div>
         <div class="hotels-calendar-grid" id="hotelsCalendarGrid"></div>
+        <p class="hotels-calendar-hint">💡 点击日期方框可添加或编辑入住记录，点击 ✓/✗ 可直接切换到账状态</p>
       </div>
 
-      <!-- 列表视图 -->
-      <div class="hotels-list-card">
-        <div class="hotels-list-header">
-          <h3>📋 入住记录</h3>
-          <span class="hotels-list-count" id="hotelsListCount">共 0 条</span>
+      <!-- 查询酒店冷却期状态（折叠） -->
+      <details class="hotels-search-collapse">
+        <summary>🔍 查询酒店冷却期状态</summary>
+        <div class="hotels-search-card">
+          <div class="hotels-search-row">
+            <input type="text" id="hotelSearchInput" class="hotels-search-input" placeholder="输入酒店名称..." onkeydown="if(event.key==='Enter')searchHotel()">
+            <button class="btn-hotels-search" onclick="searchHotel()">查询</button>
+          </div>
+          <div class="hotels-search-result" id="hotelSearchResult" style="display:none;"></div>
         </div>
-        <div class="hotels-list" id="hotelsList">
-          <div class="empty-state"><div class="empty-icon">🏨</div><p>暂无入住记录</p></div>
-        </div>
-      </div>
+      </details>
     </div>
 
     <!-- 箍牙提醒板块 -->
