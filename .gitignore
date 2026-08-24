@@ -29,3 +29,10 @@ Thumbs.db
 *.temp
 .idea/
 .vscode/
+
+# 浏览器自动化测试产物
+.playwright-cli/
+/after-toggle.yaml
+/home.yaml
+/hotels.yaml
+/main.yaml

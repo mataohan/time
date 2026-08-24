@@ -3043,6 +3043,7 @@ function renderHotelsCalendar() {
     var isToday = (dateStr === todayStr);
     var hotelNamesOnDate = hotelsMapByDate[dateStr];
     var hasCheckIn = hotelNamesOnDate && hotelNamesOnDate.length > 0;
+    var stay = hasCheckIn ? hotelNamesOnDate[0] : null;
 
     var cls = 'hotels-day';
     if (isToday) cls += ' hotels-day-today';
@@ -3056,12 +3057,50 @@ function renderHotelsCalendar() {
     html += '>';
     html += '<span class="hotels-day-num">' + d + '</span>';
     if (hasCheckIn) {
-      html += '<span class="hotels-day-dot">●</span>';
+      var pts = parseInt(stay.points, 10) || 0;
+      html += '<span class="hotels-day-info">';
+      html += '<span class="hotels-day-points' + (pts > 0 ? '' : ' hotels-day-points-zero') + '">' + (pts > 0 ? pts + '分' : '0分') + '</span>';
+      html += '<label class="hotels-day-credit" onclick="event.stopPropagation()" title="点击切换是否到账">';
+      html += '<input type="checkbox" ' + (stay.is_credited ? 'checked' : '') + ' onchange="toggleHotelCredit(' + stay.id + ', this)">';
+      html += '<span>' + (stay.is_credited ? '已到账' : '未到账') + '</span>';
+      html += '</label>';
+      html += '</span>';
     }
     html += '</div>';
   }
 
   grid.innerHTML = html;
+}
+
+async function toggleHotelCredit(id, cb) {
+  cb.disabled = true;
+  try {
+    await API.updateHotel(id, { is_credited: cb.checked });
+    for (var i = 0; i < hotelsCache.length; i++) {
+      if (hotelsCache[i].id === id) {
+        hotelsCache[i].is_credited = cb.checked;
+        break;
+      }
+    }
+    buildHotelsDateMap();
+    // 局部更新当前格子文本，避免重建整个日历
+    var label = cb.closest ? cb.closest('.hotels-day-credit') : null;
+    if (label) {
+      var txt = label.querySelector('span');
+      if (txt) {
+        txt.textContent = cb.checked ? '已到账' : '未到账';
+        txt.style.color = cb.checked ? '#4caf50' : '';
+        txt.style.fontWeight = cb.checked ? '600' : '';
+      }
+    }
+    toast(cb.checked ? '已标记为到账 ✅' : '已标记为未到账');
+    renderHotelsList();
+  } catch (err) {
+    cb.checked = !cb.checked;
+    toast('更新失败: ' + err.message, 'error');
+  } finally {
+    cb.disabled = false;
+  }
 }
 
 function showHotelDayDetail(dateStr) {
@@ -3089,23 +3128,26 @@ function showHotelDayDetail(dateStr) {
   openCustomModal(html);
 }
 
-function hotelsPrevMonth() {
+async function hotelsPrevMonth() {
   hotelsCalendarMonth--;
   if (hotelsCalendarMonth < 1) { hotelsCalendarMonth = 12; hotelsCalendarYear--; }
   renderHotelsCalendar();
+  await loadHotels();
 }
 
-function hotelsNextMonth() {
+async function hotelsNextMonth() {
   hotelsCalendarMonth++;
   if (hotelsCalendarMonth > 12) { hotelsCalendarMonth = 1; hotelsCalendarYear++; }
   renderHotelsCalendar();
+  await loadHotels();
 }
 
-function hotelsGoToToday() {
+async function hotelsGoToToday() {
   var now = new Date();
   hotelsCalendarYear = now.getFullYear();
   hotelsCalendarMonth = now.getMonth() + 1;
   renderHotelsCalendar();
+  await loadHotels();
 }
 
 function renderHotelsList() {
