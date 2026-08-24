@@ -2965,6 +2965,9 @@ function buildHotelsDateMap() {
   }
 }
 
+// 同一日期多条记录时，用于区分各酒店的小圆点颜色
+var hotelsDotColors = ['#4caf50', '#42a5f5', '#ffa726', '#ab47bc', '#ec407a', '#26a69a', '#ef5350', '#ffca28'];
+
 function renderHotelsStats() {
   var totalNights = hotelsCache.length;
   var lastStay = hotelsCache.length > 0 ? hotelsCache[0] : null;
@@ -3037,26 +3040,39 @@ function renderHotelsCalendar() {
     html += '<div class="hotels-day hotels-day-empty"></div>';
   }
 
+  // 手机端空间有限，摘要最多显示 2 家；电脑端最多 3 家
+  var maxShown = window.innerWidth < 480 ? 2 : 3;
+
   for (var d = 1; d <= totalDays; d++) {
     var dateStr = hotelsCalendarYear + '-' + String(hotelsCalendarMonth).padStart(2, '0') + '-' + String(d).padStart(2, '0');
     var isToday = (dateStr === todayStr);
-    var hotelNamesOnDate = hotelsMapByDate[dateStr];
-    var hasCheckIn = hotelNamesOnDate && hotelNamesOnDate.length > 0;
-    var stay = hasCheckIn ? hotelNamesOnDate[0] : null;
+    var staysOnDate = hotelsMapByDate[dateStr];
+    var hasCheckIn = staysOnDate && staysOnDate.length > 0;
+    var stays = hasCheckIn ? staysOnDate : [];
 
     var cls = 'hotels-day';
     if (isToday) cls += ' hotels-day-today';
     if (hasCheckIn) cls += ' hotels-day-checkin';
 
-    html += '<div class="' + cls + '" onclick="openHotelDayModal(\'' + dateStr + '\')" style="cursor:pointer;" title="' + (hasCheckIn ? '点击编辑入住记录' : '点击添加入住记录') + '">';
+    html += '<div class="' + cls + '" onclick="openHotelDayModal(\'' + dateStr + '\')" style="cursor:pointer;" title="' + (hasCheckIn ? ('当天入住 ' + stays.length + ' 家酒店，点击查看管理') : '点击查看当天入住记录') + '">';
     html += '<span class="hotels-day-num">' + d + '</span>';
     if (hasCheckIn) {
-      var pts = parseInt(stay.points, 10) || 0;
-      html += '<span class="hotels-day-hotel" title="' + esc(stay.hotel_name) + '">' + esc(stay.hotel_name) + '</span>';
-      html += '<span class="hotels-day-info">';
-      html += '<span class="hotels-day-points' + (pts > 0 ? '' : ' hotels-day-points-zero') + '">' + (pts > 0 ? pts + '分' : '0分') + '</span>';
-      html += '<span class="hotels-day-status ' + (stay.is_credited ? 'hotels-status-yes' : 'hotels-status-no') + '" onclick="event.stopPropagation();toggleHotelCredit(' + stay.id + ', this)" title="点击切换到账状态">' + (stay.is_credited ? '✓' : '✗') + '</span>';
-      html += '</span>';
+      // 总积分汇总
+      var totalPoints = 0;
+      for (var p = 0; p < stays.length; p++) totalPoints += parseInt(stays[p].points, 10) || 0;
+      // 酒店名称摘要：每条前置不同颜色小圆点
+      var shown = Math.min(stays.length, maxShown);
+      for (var i = 0; i < shown; i++) {
+        var st = stays[i];
+        html += '<span class="hotels-day-hotel-row" title="' + esc(st.hotel_name) + '">';
+        html += '<span class="hotels-day-dot' + (st.is_credited ? ' hotels-day-dot-credited' : '') + '" style="background:' + hotelsDotColors[i % hotelsDotColors.length] + '"></span>';
+        html += '<span class="hotels-day-hotel">' + esc(st.hotel_name) + '</span>';
+        if (i === maxShown - 1 && stays.length > maxShown) {
+          html += '<span class="hotels-day-more">+' + (stays.length - maxShown) + '</span>';
+        }
+        html += '</span>';
+      }
+      html += '<span class="hotels-day-total' + (totalPoints > 0 ? '' : ' hotels-day-total-zero') + '">共 ' + totalPoints + ' 分</span>';
     }
     html += '</div>';
   }
@@ -3075,11 +3091,13 @@ async function toggleHotelCredit(id, el) {
   try {
     await API.updateHotel(id, { is_credited: newVal });
     stay.is_credited = newVal;
-    // 局部更新当前格子的状态图标，避免重建整个日历
+    // 局部更新状态图标与文字，避免重建整个弹窗
     if (el) {
       el.textContent = newVal ? '✓' : '✗';
-      el.className = 'hotels-day-status ' + (newVal ? 'hotels-status-yes' : 'hotels-status-no');
+      el.className = 'hotels-day-list-status ' + (newVal ? 'hotels-status-yes' : 'hotels-status-no');
     }
+    var label = document.getElementById('hstLabel_' + id);
+    if (label) label.textContent = newVal ? '已到账' : '未到账';
     toast(newVal ? '已标记为到账 ✅' : '已标记为未到账');
   } catch (err) {
     toast('更新失败: ' + err.message, 'error');
@@ -3088,15 +3106,73 @@ async function toggleHotelCredit(id, el) {
   }
 }
 
-// 点击日期方框：有记录 → 编辑弹窗；无记录 → 新增弹窗（默认该日期）
+// 当天入住记录弹窗的来源日期：在弹窗内保存/删除后自动回到该列表
+var hotelsDayModalSource = null;
+
+// 点击日期方框：弹出当天入住记录管理弹窗（查看/添加/编辑/删除）
 function openHotelDayModal(dateStr) {
+  hotelsDayModalSource = dateStr;
   var stays = hotelsMapByDate[dateStr] || [];
-  var stay = stays.length > 0 ? stays[0] : null;
-  if (stay) {
-    openHotelFormModal('edit', stay);
+  var totalPoints = 0;
+  for (var i = 0; i < stays.length; i++) totalPoints += parseInt(stays[i].points, 10) || 0;
+
+  var html = '<h3>📅 ' + dateStr + ' 入住记录' + (stays.length > 0 ? ' <span class="hotels-day-list-count">共 ' + stays.length + ' 家</span>' : '') + '</h3>';
+  html += '<div class="modal-form-grid">';
+
+  if (stays.length === 0) {
+    html += '<div class="hotels-day-list-empty">当天暂无入住记录，点击下方按钮添加。</div>';
   } else {
-    openHotelFormModal('create', null, dateStr);
+    html += '<div class="hotels-day-list">';
+    for (var i = 0; i < stays.length; i++) {
+      var s = stays[i];
+      var pts = parseInt(s.points, 10) || 0;
+      var statusCls = s.is_credited ? 'hotels-status-yes' : 'hotels-status-no';
+      var statusText = s.is_credited ? '已到账' : '未到账';
+      html += '<div class="hotels-day-list-item">';
+      html += '<div class="hotels-day-list-info">';
+      html += '<div class="hotels-day-list-head">';
+      html += '<span class="hotels-day-list-dot" style="background:' + hotelsDotColors[i % hotelsDotColors.length] + '"></span>';
+      html += '<span class="hotels-day-list-name">' + esc(s.hotel_name) + '</span>';
+      html += '<span class="hotels-day-list-points' + (pts > 0 ? '' : ' hotels-day-list-points-zero') + '">' + (pts > 0 ? pts + '分' : '0分') + '</span>';
+      html += '</div>';
+      html += '<div class="hotels-day-list-meta">';
+      html += '<span class="hotels-day-list-status ' + statusCls + '" id="hstIcon_' + s.id + '" onclick="toggleHotelCredit(' + s.id + ', this)" title="点击切换到账状态">' + (s.is_credited ? '✓' : '✗') + '</span>';
+      html += '<span class="hotels-day-list-label" id="hstLabel_' + s.id + '">' + statusText + '</span>';
+      html += '</div>';
+      if (s.notes) html += '<div class="hotels-day-list-notes">📝 ' + esc(s.notes) + '</div>';
+      html += '</div>';
+      html += '<div class="hotels-day-list-actions">';
+      html += '<button class="hotels-day-list-edit" onclick="openHotelEditFromDay(' + s.id + ')">✏️ 编辑</button>';
+      html += '<button class="hotels-day-list-del" onclick="deleteHotelStay(' + s.id + ')">🗑️ 删除</button>';
+      html += '</div>';
+      html += '</div>';
+    }
+    html += '</div>';
+    if (totalPoints > 0) html += '<div class="hotels-day-list-total">当日合计 ' + totalPoints + ' 分</div>';
   }
+
+  html += '<div class="modal-actions form-group-full">';
+  html += '<button class="btn-cancel" onclick="closeModal()">关闭</button>';
+  html += '<button class="btn-submit" onclick="openHotelFormModal(\'create\', null, \'' + dateStr + '\')">+ 添加酒店</button>';
+  html += '</div></div>';
+
+  openCustomModal(html);
+}
+
+// 从当天列表弹窗点击“编辑”进入编辑表单
+function openHotelEditFromDay(id) {
+  var stay = null;
+  for (var i = 0; i < hotelsCache.length; i++) {
+    if (hotelsCache[i].id == id) { stay = hotelsCache[i]; break; }
+  }
+  if (!stay) { toast('记录不存在', 'error'); return; }
+  openHotelFormModal('edit', stay);
+}
+
+// 板块工具栏“+ 记录入住”：直接新增（默认今天），不回到列表弹窗
+function openHotelAddFromToolbar() {
+  hotelsDayModalSource = null;
+  openHotelFormModal('create', null, null);
 }
 
 async function hotelsPrevMonth() {
@@ -3233,6 +3309,8 @@ async function submitHotelSave(id) {
     }
     closeModal();
     await loadHotels();
+    // 若从当天列表弹窗进入，保存后自动回到该列表
+    if (hotelsDayModalSource) openHotelDayModal(hotelsDayModalSource);
   } catch (err) {
     toast((id ? '更新失败: ' : '添加失败: ') + err.message, 'error');
   }
@@ -3245,6 +3323,8 @@ async function deleteHotelStay(id) {
     toast('入住记录已删除');
     closeModal();
     await loadHotels();
+    // 若从当天列表弹窗进入，删除后自动回到该列表
+    if (hotelsDayModalSource) openHotelDayModal(hotelsDayModalSource);
   } catch (err) {
     toast('删除失败: ' + err.message, 'error');
   }
