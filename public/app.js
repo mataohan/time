@@ -2955,13 +2955,30 @@ async function loadHotels() {
   }
 }
 
+// 日期字符串加 N 天（UTC 安全），返回 'YYYY-MM-DD'
+function addDaysStr(dateStr, days) {
+  var d = new Date(dateStr + 'T00:00:00Z');
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().substring(0, 10);
+}
+
+// 某条记录覆盖到的最后一天（连住区间结束日）
+function stayEndDate(stay) {
+  return addDaysStr(normalizeDate(stay.start_date), (parseInt(stay.duration, 10) || 1) - 1);
+}
+
 function buildHotelsDateMap() {
   hotelsMapByDate = {};
   for (var i = 0; i < hotelsCache.length; i++) {
     var s = hotelsCache[i];
-    var date = normalizeDate(s.check_in_date);
-    if (!hotelsMapByDate[date]) hotelsMapByDate[date] = [];
-    hotelsMapByDate[date].push(s);
+    var start = normalizeDate(s.start_date);
+    var dur = Math.max(1, parseInt(s.duration, 10) || 1);
+    // 连住：从 start_date 起连续 dur 天，每一天都映射到该记录
+    for (var k = 0; k < dur; k++) {
+      var date = addDaysStr(start, k);
+      if (!hotelsMapByDate[date]) hotelsMapByDate[date] = [];
+      hotelsMapByDate[date].push(s);
+    }
   }
 }
 
@@ -2969,19 +2986,21 @@ function buildHotelsDateMap() {
 var hotelsDotColors = ['#4caf50', '#42a5f5', '#ffa726', '#ab47bc', '#ec407a', '#26a69a', '#ef5350', '#ffca28'];
 
 function renderHotelsStats() {
-  var totalNights = hotelsCache.length;
+  // 总间夜数 = 所有记录的连住天数之和
+  var totalNights = 0;
+  for (var i = 0; i < hotelsCache.length; i++) {
+    totalNights += parseInt(hotelsCache[i].duration, 10) || 1;
+  }
   var lastStay = hotelsCache.length > 0 ? hotelsCache[0] : null;
 
   // 计算当前可入住的酒店数量（按酒店名去重，不在冷却期内的）
   var hotelNames = {};
-  var coolingHotels = {};
-  var today = new Date();
-  today.setHours(0, 0, 0, 0);
+  var todayS = formatDate(new Date());
   for (var i = 0; i < hotelsCache.length; i++) {
     var s = hotelsCache[i];
     hotelNames[s.hotel_name] = true;
   }
-  // 对每个酒店检查是否在冷却期内
+  // 对每个酒店检查是否在冷却期内（以 start_date 为基准，start_date + 32 天可再次入住）
   var availableCount = 0;
   var names = Object.keys(hotelNames);
   for (var n = 0; n < names.length; n++) {
@@ -2995,10 +3014,8 @@ function renderHotelsStats() {
       }
     }
     if (latest) {
-      var checkIn = new Date(normalizeDate(latest.check_in_date));
-      var coolingUntil = new Date(checkIn);
-      coolingUntil.setDate(coolingUntil.getDate() + 31);
-      if (today >= coolingUntil) {
+      var nextAvailable = addDaysStr(normalizeDate(latest.start_date), 32);
+      if (todayS >= nextAvailable) {
         availableCount++;
       }
     }
@@ -3006,7 +3023,7 @@ function renderHotelsStats() {
 
   document.getElementById('hotelsTotalNights').textContent = totalNights + ' 次';
   document.getElementById('hotelsLastStay').textContent = lastStay
-    ? (lastStay.hotel_name + ' (' + normalizeDate(lastStay.check_in_date) + ')')
+    ? (lastStay.hotel_name + ' (' + normalizeDate(lastStay.start_date) + (parseInt(lastStay.duration, 10) > 1 ? '·连住' + (parseInt(lastStay.duration, 10) || 1) + '天' : '') + ')')
     : '—';
   document.getElementById('hotelsAvailable').textContent = names.length > 0
     ? availableCount + ' / ' + names.length
@@ -3057,22 +3074,32 @@ function renderHotelsCalendar() {
     html += '<div class="' + cls + '" onclick="openHotelDayModal(\'' + dateStr + '\')" style="cursor:pointer;" title="' + (hasCheckIn ? ('当天入住 ' + stays.length + ' 家酒店，点击查看管理') : '点击查看当天入住记录') + '">';
     html += '<span class="hotels-day-num">' + d + '</span>';
     if (hasCheckIn) {
-      // 总积分汇总
+      // 总积分：只统计当天开始入住的记录（延续记录不重复计积分）
       var totalPoints = 0;
-      for (var p = 0; p < stays.length; p++) totalPoints += parseInt(stays[p].points, 10) || 0;
-      // 酒店名称摘要：每条前置不同颜色小圆点
+      var hasStartToday = false;
+      for (var p = 0; p < stays.length; p++) {
+        if (normalizeDate(stays[p].start_date) === dateStr) {
+          totalPoints += parseInt(stays[p].points, 10) || 0;
+          hasStartToday = true;
+        }
+      }
+      // 酒店名称摘要：每条前置不同颜色小圆点；延续记录（非起始日）加“续”标记
       var shown = Math.min(stays.length, maxShown);
       for (var i = 0; i < shown; i++) {
         var st = stays[i];
+        var isStart = normalizeDate(st.start_date) === dateStr;
         html += '<span class="hotels-day-hotel-row" title="' + esc(st.hotel_name) + '">';
         html += '<span class="hotels-day-dot' + (st.is_credited ? ' hotels-day-dot-credited' : '') + '" style="background:' + hotelsDotColors[i % hotelsDotColors.length] + '"></span>';
         html += '<span class="hotels-day-hotel">' + esc(st.hotel_name) + '</span>';
+        if (!isStart) html += '<span class="hotels-day-cont">续</span>';
         if (i === maxShown - 1 && stays.length > maxShown) {
           html += '<span class="hotels-day-more">+' + (stays.length - maxShown) + '</span>';
         }
         html += '</span>';
       }
-      html += '<span class="hotels-day-total' + (totalPoints > 0 ? '' : ' hotels-day-total-zero') + '">共 ' + totalPoints + ' 分</span>';
+      if (hasStartToday) {
+        html += '<span class="hotels-day-total' + (totalPoints > 0 ? '' : ' hotels-day-total-zero') + '">共 ' + totalPoints + ' 分</span>';
+      }
     }
     html += '</div>';
   }
@@ -3113,8 +3140,15 @@ var hotelsDayModalSource = null;
 function openHotelDayModal(dateStr) {
   hotelsDayModalSource = dateStr;
   var stays = hotelsMapByDate[dateStr] || [];
+  // 当日新增积分：只统计当天开始入住的记录（延续记录不重复计积分）
   var totalPoints = 0;
-  for (var i = 0; i < stays.length; i++) totalPoints += parseInt(stays[i].points, 10) || 0;
+  var hasStartToday = false;
+  for (var i = 0; i < stays.length; i++) {
+    if (normalizeDate(stays[i].start_date) === dateStr) {
+      totalPoints += parseInt(stays[i].points, 10) || 0;
+      hasStartToday = true;
+    }
+  }
 
   var html = '<h3>📅 ' + dateStr + ' 入住记录' + (stays.length > 0 ? ' <span class="hotels-day-list-count">共 ' + stays.length + ' 家</span>' : '') + '</h3>';
   html += '<div class="modal-form-grid">';
@@ -3138,6 +3172,7 @@ function openHotelDayModal(dateStr) {
       html += '<div class="hotels-day-list-meta">';
       html += '<span class="hotels-day-list-status ' + statusCls + '" id="hstIcon_' + s.id + '" onclick="toggleHotelCredit(' + s.id + ', this)" title="点击切换到账状态">' + (s.is_credited ? '✓' : '✗') + '</span>';
       html += '<span class="hotels-day-list-label" id="hstLabel_' + s.id + '">' + statusText + '</span>';
+      html += '<span class="hotels-day-list-dates">📅 ' + normalizeDate(s.start_date) + ' 入住' + ((parseInt(s.duration, 10) || 1) > 1 ? ' · 连住 ' + (parseInt(s.duration, 10) || 1) + ' 天' : '') + '</span>';
       html += '</div>';
       if (s.notes) html += '<div class="hotels-day-list-notes">📝 ' + esc(s.notes) + '</div>';
       html += '</div>';
@@ -3148,7 +3183,7 @@ function openHotelDayModal(dateStr) {
       html += '</div>';
     }
     html += '</div>';
-    if (totalPoints > 0) html += '<div class="hotels-day-list-total">当日合计 ' + totalPoints + ' 分</div>';
+    if (hasStartToday && totalPoints > 0) html += '<div class="hotels-day-list-total">当日新增 ' + totalPoints + ' 分</div>';
   }
 
   html += '<div class="modal-actions form-group-full">';
@@ -3203,7 +3238,8 @@ function openHotelFormModal(mode, stay, defaultDate) {
   var isEdit = mode === 'edit';
   var title = isEdit ? '✏️ 编辑入住记录' : '🏨 添加入住记录';
   var nameVal = isEdit ? esc(stay.hotel_name) : '';
-  var dateVal = isEdit ? normalizeDate(stay.check_in_date) : (defaultDate || formatDate(new Date()));
+  var dateVal = isEdit ? normalizeDate(stay.start_date) : (defaultDate || formatDate(new Date()));
+  var durVal = isEdit ? (parseInt(stay.duration, 10) || 1) : 1;
   var ptsVal = isEdit ? (parseInt(stay.points, 10) || 0) : '';
   var credChecked = isEdit && stay.is_credited ? ' checked' : '';
   var notesVal = isEdit ? esc(stay.notes || '') : '';
@@ -3213,7 +3249,8 @@ function openHotelFormModal(mode, stay, defaultDate) {
     '<h3>' + title + '</h3>' +
     '<div class="modal-form-grid">' +
     '<div class="form-group form-group-col"><label>酒店名称</label><input type="text" id="hHotelName" value="' + nameVal + '" placeholder="如：全季酒店（北京国贸店）"></div>' +
-    '<div class="form-group form-group-col"><label>入住日期</label><input type="date" id="hCheckinDate" value="' + dateVal + '"></div>' +
+    '<div class="form-group form-group-col"><label>入住开始日期</label><input type="date" id="hCheckinDate" value="' + dateVal + '"></div>' +
+    '<div class="form-group form-group-col"><label>连住天数</label><input type="number" id="hDuration" min="1" max="30" value="' + durVal + '"><div class="form-help">连住 N 天，日历将连续标记 N 天</div></div>' +
     '<div class="form-group form-group-col"><label>积分与到账</label>' +
     '<div class="hotel-points-credit-row">' +
     '<input type="number" id="hPoints" min="0" value="' + ptsVal + '" placeholder="0" aria-label="积分数量">' +
@@ -3233,13 +3270,15 @@ function openHotelFormModal(mode, stay, defaultDate) {
     if (el) el.focus();
   }, 100);
 
-  // 酒店名称改变时自动检查冷却期（新增和编辑均适用）
-  var nameInput = document.getElementById('hHotelName');
-  if (nameInput) {
-    nameInput.addEventListener('input', function () {
-      autoCheckHotel(nameInput.value.trim());
-    });
-    if (nameVal) autoCheckHotel(nameVal);
+  // 酒店名称改变时自动检查冷却期（仅新增时适用，编辑已有记录不提示）
+  if (!isEdit) {
+    var nameInput = document.getElementById('hHotelName');
+    if (nameInput) {
+      nameInput.addEventListener('input', function () {
+        autoCheckHotel(nameInput.value.trim());
+      });
+      if (nameVal) autoCheckHotel(nameVal);
+    }
   }
 }
 
@@ -3273,17 +3312,21 @@ async function autoCheckHotel(name) {
 async function submitHotelSave(id) {
   var hotelNameEl = document.getElementById('hHotelName');
   var dateEl = document.getElementById('hCheckinDate');
+  var durationEl = document.getElementById('hDuration');
   var pointsEl = document.getElementById('hPoints');
   var creditedEl = document.getElementById('hCredited');
   var notesEl = document.getElementById('hNotes');
   var hotelName = hotelNameEl ? hotelNameEl.value.trim() : '';
   var checkinDate = dateEl ? dateEl.value : '';
+  var duration = durationEl ? (parseInt(durationEl.value, 10) || 1) : 1;
+  if (duration < 1) duration = 1;
   var points = pointsEl ? pointsEl.value : '';
   var isCredited = creditedEl ? creditedEl.checked : false;
   var notes = notesEl ? notesEl.value : '';
 
   if (!hotelName) { toast('请输入酒店名称', 'error'); return; }
   if (!checkinDate) { toast('请选择入住日期', 'error'); return; }
+  if (duration > 30) { toast('连住天数不能超过 30 天', 'error'); return; }
 
   if (!id) {
     // 新增时提交前检查冷却期
@@ -3301,11 +3344,11 @@ async function submitHotelSave(id) {
 
   try {
     if (id) {
-      await API.updateHotel(id, { hotel_name: hotelName, check_in_date: checkinDate, points: points, is_credited: isCredited, notes: notes });
+      await API.updateHotel(id, { hotel_name: hotelName, start_date: checkinDate, duration: duration, points: points, is_credited: isCredited, notes: notes });
       toast('入住记录已更新 ✏️');
     } else {
-      await API.createHotel({ hotel_name: hotelName, check_in_date: checkinDate, points: points, is_credited: isCredited, notes: notes });
-      toast('入住记录已添加 🏨');
+      await API.createHotel({ hotel_name: hotelName, start_date: checkinDate, duration: duration, points: points, is_credited: isCredited, notes: notes });
+      toast(duration > 1 ? ('入住记录已添加，连住 ' + duration + ' 天 🏨') : '入住记录已添加 🏨');
     }
     closeModal();
     await loadHotels();
@@ -3351,14 +3394,14 @@ async function searchHotel() {
     } else if (result.can_check_in) {
       resultEl.innerHTML = '<div class="hotels-search-result-item hotels-search-result-ok">' +
         '<div class="hotels-search-result-icon">✅</div>' +
-        '<div class="hotels-search-result-text">最近入住：' + result.last_check_in + '，<span style="color:#4caf50;font-weight:600;">可入住</span></div>' +
+        '<div class="hotels-search-result-text">最近入住：' + result.last_check_in + (result.last_duration > 1 ? '（连住' + result.last_duration + '天）' : '') + '，<span style="color:#4caf50;font-weight:600;">可入住</span></div>' +
         '</div>';
       resultEl.style.background = 'rgba(76,175,80,0.08)';
       resultEl.style.borderColor = 'rgba(76,175,80,0.25)';
     } else {
       resultEl.innerHTML = '<div class="hotels-search-result-item hotels-search-result-cooling">' +
         '<div class="hotels-search-result-icon">⏳</div>' +
-        '<div class="hotels-search-result-text">最近入住：' + result.last_check_in + '，<span style="color:#ef5350;font-weight:600;">剩余 ' + result.days_remaining + ' 天</span>（冷却期至 ' + result.cooling_until + '）</div>' +
+        '<div class="hotels-search-result-text">最近入住：' + result.last_check_in + (result.last_duration > 1 ? '（连住' + result.last_duration + '天）' : '') + '，<span style="color:#ef5350;font-weight:600;">剩余 ' + result.days_remaining + ' 天</span>（冷却期至 ' + result.cooling_until + '）</div>' +
         '</div>';
       resultEl.style.background = 'rgba(239,83,80,0.08)';
       resultEl.style.borderColor = 'rgba(239,83,80,0.25)';
