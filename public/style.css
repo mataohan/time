@@ -852,9 +852,23 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;bottom:0;background:
 /* 当天入住记录列表弹窗 */
 .hotels-day-list-count{font-size:13px;color:var(--text-muted);font-weight:500}
 .hotels-day-list-empty{padding:28px 16px;text-align:center;font-size:14px;color:var(--text-muted);background:var(--bg-input);border:1px dashed var(--border);border-radius:var(--radius-sm)}
-.hotels-day-list{display:flex;flex-direction:column;gap:10px}
-.hotels-day-list-item{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding:14px 16px;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius-sm);transition:var(--transition)}
-.hotels-day-list-item:hover{border-color:var(--border-accent)}
+.hotels-day-list{display:flex;flex-direction:column;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg-input);overflow:hidden}
+.hotels-day-list-item{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding:14px 16px;background:transparent;border:none;border-bottom:1px solid var(--border);transition:var(--transition)}
+.hotels-day-list-item:last-child{border-bottom:none}
+.hotels-day-list-item:hover{background:rgba(79,195,247,0.05)}
+.hotels-day-list-item-editing{display:block;padding:0;background:transparent;border:none}
+.hotels-day-list-item-editing .hotels-day-form{margin-top:0}
+
+/* 华住会：当天记录单面板（列表 + 原地新增/编辑） */
+.hotels-day-panel-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}
+.hotels-day-panel-head h3{margin-bottom:0}
+.hotels-day-panel-close{width:34px;height:34px;border-radius:50%;border:1px solid var(--border);background:var(--bg-input);color:var(--text-secondary);font-size:15px;cursor:pointer;transition:var(--transition);flex-shrink:0;line-height:1}
+.hotels-day-panel-close:hover{color:var(--danger);border-color:rgba(239,83,80,0.45)}
+.hotels-day-panel-add{margin-top:14px}
+.hotels-day-panel-add-btn{width:100%;padding:12px 16px;border:1px dashed var(--border-accent);border-radius:var(--radius-sm);background:rgba(79,195,247,0.06);color:var(--accent);font-size:15px;font-weight:600;cursor:pointer;transition:var(--transition);min-height:44px}
+.hotels-day-panel-add-btn:hover{background:rgba(79,195,247,0.12);border-color:var(--accent)}
+.hotels-day-form{margin-top:14px;padding:18px 20px;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius-sm);animation:slideUp .25s ease}
+.hotels-day-form-title{font-size:15px;font-weight:700;color:var(--accent);margin-bottom:14px}
 .hotels-day-list-info{flex:1;min-width:0}
 .hotels-day-list-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .hotels-day-list-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}

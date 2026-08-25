@@ -3130,9 +3130,13 @@ async function toggleHotelCredit(id, el) {
 // 当天入住记录弹窗的来源日期：在弹窗内保存/删除后自动回到该列表
 var hotelsDayModalSource = null;
 
-// 点击日期方框：弹出当天入住记录管理弹窗（查看/添加/编辑/删除）
+// 点击日期方框：打开当天入住记录面板（列表 + 原地新增/编辑，单界面完成全部操作）
 function openHotelDayModal(dateStr) {
   hotelsDayModalSource = dateStr;
+  renderHotelDayPanel(dateStr);
+}
+
+function renderHotelDayPanel(dateStr) {
   var stays = hotelsMapByDate[dateStr] || [];
   // 当日新增积分：只统计当天开始入住的记录（延续记录不重复计积分）
   var totalPoints = 0;
@@ -3144,8 +3148,13 @@ function openHotelDayModal(dateStr) {
     }
   }
 
-  var html = '<h3>📅 ' + dateStr + ' 入住记录' + (stays.length > 0 ? ' <span class="hotels-day-list-count">共 ' + stays.length + ' 家</span>' : '') + '</h3>';
-  html += '<div class="modal-form-grid">';
+  var html = '<div class="hotels-day-panel">';
+  html += '<div class="hotels-day-panel-head">';
+  html += '<h3>📅 ' + dateStr + ' 入住记录' + (stays.length > 0 ? ' <span class="hotels-day-list-count">共 ' + stays.length + ' 家</span>' : '') + '</h3>';
+  html += '<button class="hotels-day-panel-close" onclick="closeModal()" title="关闭">✕</button>';
+  html += '</div>';
+
+  if (hasStartToday && totalPoints > 0) html += '<div class="hotels-day-list-total">当日新增 ' + totalPoints + ' 分</div>';
 
   if (stays.length === 0) {
     html += '<div class="hotels-day-list-empty">当天暂无入住记录，点击下方按钮添加。</div>';
@@ -3156,7 +3165,7 @@ function openHotelDayModal(dateStr) {
       var pts = parseInt(s.points, 10) || 0;
       var statusCls = s.is_credited ? 'hotels-status-yes' : 'hotels-status-no';
       var statusText = s.is_credited ? '已到账' : '未到账';
-      html += '<div class="hotels-day-list-item">';
+      html += '<div class="hotels-day-list-item" id="hstRow_' + s.id + '">';
       html += '<div class="hotels-day-list-info">';
       html += '<div class="hotels-day-list-head">';
       html += '<span class="hotels-day-list-dot" style="background:' + hotelsDotColors[i % hotelsDotColors.length] + '"></span>';
@@ -3171,31 +3180,143 @@ function openHotelDayModal(dateStr) {
       if (s.notes) html += '<div class="hotels-day-list-notes">📝 ' + esc(s.notes) + '</div>';
       html += '</div>';
       html += '<div class="hotels-day-list-actions">';
-      html += '<button class="hotels-day-list-edit" onclick="openHotelEditFromDay(' + s.id + ')">✏️ 编辑</button>';
+      html += '<button class="hotels-day-list-edit" onclick="hotelPanelEdit(' + s.id + ')">✏️ 编辑</button>';
       html += '<button class="hotels-day-list-del" onclick="deleteHotelStay(' + s.id + ')">🗑️ 删除</button>';
       html += '</div>';
       html += '</div>';
     }
     html += '</div>';
-    if (hasStartToday && totalPoints > 0) html += '<div class="hotels-day-list-total">当日新增 ' + totalPoints + ' 分</div>';
   }
 
-  html += '<div class="modal-actions form-group-full">';
-  html += '<button class="btn-cancel" onclick="closeModal()">关闭</button>';
-  html += '<button class="btn-submit" onclick="openHotelFormModal(\'create\', null, \'' + dateStr + '\')">+ 添加酒店</button>';
-  html += '</div></div>';
+  // 添加按钮：点击后在按钮下方原地展开新增表单
+  html += '<div class="hotels-day-panel-add">';
+  html += '<button class="hotels-day-panel-add-btn" id="hotelPanelAddBtn" onclick="hotelPanelAddForm(\'' + dateStr + '\')">+ 添加酒店</button>';
+  html += '</div>';
+  html += '<div id="hotelPanelFormSlot"></div>';
+
+  html += '<div class="modal-actions form-group-full"><button class="btn-cancel" onclick="closeModal()">关闭</button></div>';
+  html += '</div>';
 
   openCustomModal(html);
 }
 
-// 从当天列表弹窗点击“编辑”进入编辑表单
-function openHotelEditFromDay(id) {
+// 内联表单 HTML（stay 为 null 表示新增，否则编辑）
+function hotelPanelFormHtml(stay, defaultDate) {
+  var isEdit = !!stay;
+  var nameVal = isEdit ? esc(stay.hotel_name) : '';
+  var dateVal = isEdit ? normalizeDate(stay.start_date) : (defaultDate || formatDate(new Date()));
+  var durVal = isEdit ? (parseInt(stay.duration, 10) || 1) : 1;
+  var ptsVal = isEdit ? (parseInt(stay.points, 10) || 0) : '';
+  var credChecked = isEdit && stay.is_credited ? ' checked' : '';
+  var notesVal = isEdit ? esc(stay.notes || '') : '';
+  var idAttr = isEdit ? stay.id : '';
+  var nameOnInput = isEdit ? '' : ' oninput="autoCheckHotel(this.value.trim())"';
+
+  var html = '<div class="hotels-day-form">';
+  html += '<div class="hotels-day-form-title">' + (isEdit ? '✏️ 编辑入住记录' : '🏨 新增入住记录') + '</div>';
+  html += '<div class="modal-form-grid">';
+  html += '<div class="form-group form-group-col"><label>酒店名称</label><input type="text" id="hHotelName" value="' + nameVal + '"' + nameOnInput + ' placeholder="如：全季酒店（北京国贸店）"></div>';
+  html += '<div class="form-group form-group-col"><label>入住开始日期</label><input type="date" id="hCheckinDate" value="' + dateVal + '"></div>';
+  html += '<div class="form-group form-group-col"><label>连住天数</label><input type="number" id="hDuration" min="1" max="30" value="' + durVal + '"><div class="form-help">连住 N 天，日历将连续标记 N 天</div></div>';
+  html += '<div class="form-group form-group-col"><label>积分与到账</label><div class="hotel-points-credit-row">';
+  html += '<input type="number" id="hPoints" min="0" value="' + ptsVal + '" placeholder="0" aria-label="积分数量">';
+  html += '<label class="hotel-checkbox-inline" title="积分是否已到账"><input type="checkbox" id="hCredited"' + credChecked + '> 已到账</label>';
+  html += '</div></div>';
+  html += '<div class="form-group form-group-full"><label>备注（可选）</label><textarea id="hNotes" class="hotels-notes-input" rows="2" placeholder="如：华住会App预订，含早餐">' + notesVal + '</textarea></div>';
+  html += '<div class="form-group form-group-full" id="hCheckWarning" style="display:none;padding:12px 16px;border-radius:8px;background:rgba(239,83,80,0.08);border:1px solid rgba(239,83,80,0.25);color:#ef5350;font-size:14px;"></div>';
+  html += '<div class="modal-actions form-group-full">';
+  html += '<button class="btn-cancel" onclick="cancelHotelPanelForm()">取消</button>';
+  if (isEdit) html += '<button class="btn-danger" onclick="deleteHotelStay(' + idAttr + ')">删除</button>';
+  html += '<button class="btn-submit" onclick="submitHotelPanelForm(' + (isEdit ? idAttr : 'null') + ')">' + (isEdit ? '保存修改' : '保存') + '</button>';
+  html += '</div></div></div>';
+  return html;
+}
+
+// 点击“+ 添加酒店”：在按钮下方原地展开新增表单
+function hotelPanelAddForm(dateStr) {
+  var slot = document.getElementById('hotelPanelFormSlot');
+  var addBtn = document.getElementById('hotelPanelAddBtn');
+  if (!slot) return;
+  slot.innerHTML = hotelPanelFormHtml(null, dateStr);
+  if (addBtn) addBtn.style.display = 'none';
+  setTimeout(function () {
+    slot.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    var el = document.getElementById('hHotelName');
+    if (el) el.focus();
+  }, 60);
+}
+
+// 点击“编辑”：该记录在列表内原地展开编辑表单
+function hotelPanelEdit(id) {
   var stay = null;
   for (var i = 0; i < hotelsCache.length; i++) {
     if (hotelsCache[i].id == id) { stay = hotelsCache[i]; break; }
   }
   if (!stay) { toast('记录不存在', 'error'); return; }
-  openHotelFormModal('edit', stay);
+  var row = document.getElementById('hstRow_' + id);
+  if (!row) return;
+  row.className = 'hotels-day-list-item hotels-day-list-item-editing';
+  row.innerHTML = hotelPanelFormHtml(stay, null);
+  setTimeout(function () {
+    row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    var el = document.getElementById('hHotelName');
+    if (el) el.focus();
+  }, 60);
+}
+
+// 取消：收起表单，恢复列表显示
+function cancelHotelPanelForm() {
+  if (hotelsDayModalSource) renderHotelDayPanel(hotelsDayModalSource);
+}
+
+// 内联表单提交（id 为空表示新增，否则编辑）
+async function submitHotelPanelForm(id) {
+  var hotelNameEl = document.getElementById('hHotelName');
+  var dateEl = document.getElementById('hCheckinDate');
+  var durationEl = document.getElementById('hDuration');
+  var pointsEl = document.getElementById('hPoints');
+  var creditedEl = document.getElementById('hCredited');
+  var notesEl = document.getElementById('hNotes');
+  var hotelName = hotelNameEl ? hotelNameEl.value.trim() : '';
+  var checkinDate = dateEl ? dateEl.value : '';
+  var duration = durationEl ? (parseInt(durationEl.value, 10) || 1) : 1;
+  if (duration < 1) duration = 1;
+  var points = pointsEl ? pointsEl.value : '';
+  var isCredited = creditedEl ? creditedEl.checked : false;
+  var notes = notesEl ? notesEl.value : '';
+
+  if (!hotelName) { toast('请输入酒店名称', 'error'); return; }
+  if (!checkinDate) { toast('请选择入住日期', 'error'); return; }
+  if (duration > 30) { toast('连住天数不能超过 30 天', 'error'); return; }
+
+  // 新增时提交前检查冷却期
+  if (!id) {
+    try {
+      var checkResult = await API.checkHotel(hotelName);
+      if (!checkResult.can_check_in) {
+        toast('该酒店在冷却期内（剩余 ' + checkResult.days_remaining + ' 天），无法入住', 'error');
+        return;
+      }
+    } catch (err) {
+      toast('检查酒店状态失败: ' + err.message, 'error');
+      return;
+    }
+  }
+
+  try {
+    if (id) {
+      await API.updateHotel(id, { hotel_name: hotelName, start_date: checkinDate, duration: duration, points: points, is_credited: isCredited, notes: notes });
+      toast('入住记录已更新 ✏️');
+    } else {
+      await API.createHotel({ hotel_name: hotelName, start_date: checkinDate, duration: duration, points: points, is_credited: isCredited, notes: notes });
+      toast(duration > 1 ? ('入住记录已添加，连住 ' + duration + ' 天 🏨') : '入住记录已添加 🏨');
+    }
+    await loadHotels();
+    // 保存成功后列表刷新、表单收起，仍停留在当天面板
+    if (hotelsDayModalSource) renderHotelDayPanel(hotelsDayModalSource);
+  } catch (err) {
+    toast((id ? '更新失败: ' : '添加失败: ') + err.message, 'error');
+  }
 }
 
 // 板块工具栏“+ 记录入住”：直接新增（默认今天），不回到列表弹窗
