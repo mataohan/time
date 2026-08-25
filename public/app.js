@@ -3374,10 +3374,16 @@ async function submitHotelPanelForm(id) {
       await API.createHotel({ hotel_name: hotelName, start_date: checkinDate, duration: duration, points: points, is_credited: isCredited, notes: notes });
       toast(duration > 1 ? ('入住记录已添加，连住 ' + duration + ' 天 🏨') : '入住记录已添加 🏨');
     }
+    // 保存成功后：刷新日历/统计/标签区，并自动关闭面板回到日历视图
     await loadHotels();
-    // 保存成功后列表刷新、表单收起，仍停留在当天面板
-    if (hotelsDayModalSource) renderHotelDayPanel(hotelsDayModalSource);
+    closeModal();
   } catch (err) {
+    // 保存失败：保持面板打开，并在表单内显示红色错误提示，便于修正后重新提交
+    var warn = document.getElementById('hCheckWarning');
+    if (warn) {
+      warn.textContent = (id ? '更新失败: ' : '添加失败: ') + err.message;
+      warn.style.display = 'block';
+    }
     toast((id ? '更新失败: ' : '添加失败: ') + err.message, 'error');
   }
 }
