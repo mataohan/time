@@ -1264,6 +1264,7 @@ async function saveCompletionNote(id) {
 // ==================== 支出分析 ====================
 var expAnalysisYear = null;   // 分析面板年份
 var expAnalysisMonth = null;  // 分析面板月份（null = 全年）
+var expAnalysisSelectedCat = null; // 当前选中的分类（用于明细联动）
 var expAnalysisColors = ['#4caf50', '#42a5f5', '#ffa726', '#ab47bc', '#ec407a', '#26a69a', '#ef5350', '#7e57c2', '#ff7043', '#66bb6a', '#5c6bc0', '#ffca28'];
 
 // 打开支出分析面板
@@ -1271,6 +1272,7 @@ function openExpenseAnalysis() {
   var now = new Date();
   expAnalysisYear = String(now.getFullYear());
   expAnalysisMonth = null; // 默认统计全年
+  expAnalysisSelectedCat = null;
   var html = '<div class="exp-analysis-panel">';
   html += '<div class="exp-analysis-head">';
   html += '<h3>📊 支出分析</h3>';
@@ -1303,13 +1305,14 @@ function populateExpAnalysisSelects() {
   if (mSel) mSel.value = expAnalysisMonth || '';
 }
 
-// 分析面板选择器变化时重新加载
+// 分析面板选择器变化时重新加载（清空已选分类与明细，避免混淆）
 function expAnalysisReload() {
   var ySel = document.getElementById('expAnalysisYearSel');
   var mSel = document.getElementById('expAnalysisMonthSel');
   if (!ySel) return;
   expAnalysisYear = ySel.value;
   expAnalysisMonth = mSel ? (mSel.value || null) : null;
+  expAnalysisSelectedCat = null;
   loadExpenseAnalysis();
 }
 
@@ -1328,7 +1331,7 @@ async function loadExpenseAnalysis() {
   }
 }
 
-// 渲染分类占比列表
+// 渲染分类占比列表（左栏）+ 明细区域（右栏）
 function renderExpenseAnalysis(data) {
   var body = document.getElementById('expAnalysisBody');
   if (!body) return;
@@ -1336,6 +1339,8 @@ function renderExpenseAnalysis(data) {
   var periodLabel = data.month ? (data.year + '年' + data.month + '月') : (data.year + '年（全年）');
   var cats = data.categories || [];
   var html = '';
+  html += '<div class="exp-analysis-main">';
+  html += '<div class="exp-analysis-left">';
   html += '<div class="exp-analysis-total-row">';
   html += '<span class="exp-analysis-total-label">' + periodLabel + ' 总支出</span>';
   html += '<span class="exp-analysis-total-value">¥ ' + total.toFixed(2) + '</span>';
@@ -1348,7 +1353,8 @@ function renderExpenseAnalysis(data) {
       var c = cats[i];
       var pct = typeof c.percentage === 'number' ? c.percentage : 0;
       var color = expAnalysisColors[i % expAnalysisColors.length];
-      html += '<div class="exp-analysis-item">';
+      var isSel = expAnalysisSelectedCat === c.category;
+      html += '<div class="exp-analysis-item' + (isSel ? ' exp-analysis-item-selected' : '') + '" data-cat="' + esc(c.category) + '" onclick="selectExpAnalysisCat(this.getAttribute(\'data-cat\'))">';
       html += '<div class="exp-analysis-item-head">';
       html += '<span class="exp-analysis-cat"><span class="exp-analysis-dot" style="background:' + color + '"></span>' + esc(c.category) + '</span>';
       html += '<span class="exp-analysis-val">¥ ' + (parseFloat(c.total) || 0).toFixed(2) + ' · ' + pct + '%</span>';
@@ -1358,7 +1364,72 @@ function renderExpenseAnalysis(data) {
     }
     html += '</div>';
   }
+  html += '</div>';
+  // 右侧明细区域
+  html += '<div class="exp-analysis-detail">';
+  html += '<div class="exp-analysis-detail-title" id="expAnalysisDetailTitle">📋 请点击分类查看明细</div>';
+  html += '<div class="exp-analysis-detail-list" id="expAnalysisDetailList"><div class="exp-analysis-detail-tip">点击左侧分类，查看该分类的支出明细</div></div>';
+  html += '</div>';
+  html += '</div>';
   body.innerHTML = html;
+  // 若已有选中分类（如切换选择器后再次点开），自动重新加载其明细
+  if (expAnalysisSelectedCat) {
+    loadExpenseAnalysisDetail();
+  }
+}
+
+// 点击分类：高亮该分类并加载明细
+function selectExpAnalysisCat(cat) {
+  if (!cat) return;
+  expAnalysisSelectedCat = cat;
+  var items = document.querySelectorAll('.exp-analysis-item');
+  for (var i = 0; i < items.length; i++) {
+    items[i].classList.toggle('exp-analysis-item-selected', items[i].getAttribute('data-cat') === cat);
+  }
+  loadExpenseAnalysisDetail();
+}
+
+// 加载选中分类在当前年份/月份下的支出明细（按金额从高到低）
+async function loadExpenseAnalysisDetail() {
+  var list = document.getElementById('expAnalysisDetailList');
+  var title = document.getElementById('expAnalysisDetailTitle');
+  if (!list || !title) return;
+  var cat = expAnalysisSelectedCat;
+  if (!cat) {
+    title.textContent = '📋 请点击分类查看明细';
+    list.innerHTML = '<div class="exp-analysis-detail-tip">点击左侧分类，查看该分类的支出明细</div>';
+    return;
+  }
+  title.textContent = esc(cat) + '明细';
+  list.innerHTML = '<div class="exp-analysis-loading">加载中…</div>';
+  try {
+    var params = { year: expAnalysisYear, category: cat };
+    if (expAnalysisMonth) params.month = expAnalysisMonth;
+    var res = await API.getExpenses(params);
+    if (document.getElementById('expAnalysisDetailList') !== list) return;
+    var rows = (res.expenses || []).slice().sort(function (a, b) {
+      return (parseFloat(b.amount) || 0) - (parseFloat(a.amount) || 0);
+    });
+    if (rows.length === 0) {
+      list.innerHTML = '<div class="exp-analysis-detail-empty">该分类暂无支出记录</div>';
+    } else {
+      var html = '';
+      for (var i = 0; i < rows.length; i++) {
+        var r = rows[i];
+        html += '<div class="exp-analysis-detail-item">';
+        html += '<div class="exp-analysis-detail-main">';
+        html += '<span class="exp-analysis-detail-date">' + esc(r.expense_date) + '</span>';
+        if (r.note && String(r.note).trim()) html += '<span class="exp-analysis-detail-note">' + esc(r.note) + '</span>';
+        html += '</div>';
+        html += '<span class="exp-analysis-detail-amount">¥ ' + (parseFloat(r.amount) || 0).toFixed(2) + '</span>';
+        html += '</div>';
+      }
+      list.innerHTML = html;
+    }
+  } catch (err) {
+    if (document.getElementById('expAnalysisDetailList') !== list) return;
+    list.innerHTML = '<div class="exp-analysis-detail-error">明细加载失败: ' + esc(err.message) + '</div>';
+  }
 }
 
 // ==================== 记账 ====================
