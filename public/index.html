@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>时间管理大师</title>
-<link rel="stylesheet" href="style.css?v=3.6">
+<link rel="stylesheet" href="style.css?v=3.7">
 </head>
 <body>
 
@@ -300,6 +300,15 @@
         </div>
       </div>
 
+      <!-- 我的酒店：点击标签高亮该酒店所有入住日期 -->
+      <div class="hotels-names-wrap" id="hotelsNamesWrap" style="display:none;">
+        <div class="hotels-names-head">
+          <span class="hotels-names-title">🏨 我的酒店</span>
+          <button class="hotels-names-clear" id="hotelsNamesClearBtn" onclick="hotelsClearHighlight()" style="display:none;">✕ 取消高亮</button>
+        </div>
+        <div class="hotels-names-list" id="hotelsNamesList"></div>
+      </div>
+
       <!-- 操作栏 -->
       <div class="hotels-toolbar">
         <button class="btn-hotels-primary" onclick="openHotelAddFromToolbar()">+ 记录入住</button>
@@ -410,7 +419,7 @@
 <div id="modalOverlay" class="modal-overlay" style="display:none;" onclick="if(event.target===this)closeModal()"><div class="modal" id="modalContent"></div></div>
 <div id="toastContainer"></div>
 
-<script src="app.js?v=3.6" onerror="document.getElementById('jsLoadError').style.display='block'; console.error('app.js 加载失败，请检查服务器状态')"></script>
+<script src="app.js?v=3.7" onerror="document.getElementById('jsLoadError').style.display='block'; console.error('app.js 加载失败，请检查服务器状态')"></script>
 <div id="jsLoadError" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#1a1a2e;color:#e0e0e0;padding:30px;border-radius:12px;text-align:center;z-index:99999;border:2px solid #e94560;max-width:420px;">
   <div style="font-size:48px;margin-bottom:16px;">⚠️</div>
   <h2 style="color:#e94560;margin-bottom:12px;">脚本加载失败</h2>

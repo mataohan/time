@@ -2948,7 +2948,9 @@ async function loadHotels() {
     var result = await API.getHotels();
     hotelsCache = result.stays || [];
     buildHotelsDateMap();
+    buildHotelsByName();
     renderHotelsStats();
+    renderHotelsNames();
     renderHotelsCalendar();
   } catch (err) {
     toast('加载入住记录失败: ' + err.message, 'error');
@@ -2984,6 +2986,74 @@ function buildHotelsDateMap() {
 
 // 同一日期多条记录时，用于区分各酒店的小圆点颜色
 var hotelsDotColors = ['#4caf50', '#42a5f5', '#ffa726', '#ab47bc', '#ec407a', '#26a69a', '#ef5350', '#ffca28'];
+
+// 按酒店名分组：{ 酒店名: { count: 入住记录条数, dates: { 'YYYY-MM-DD': true } } }
+var hotelsByName = {};
+// 当前高亮的酒店名（null 表示无高亮）
+var hotelsHighlightName = null;
+
+// 按酒店名称分组，统计入住次数与覆盖的全部日期（start_date 起连住 N 天）
+function buildHotelsByName() {
+  hotelsByName = {};
+  for (var i = 0; i < hotelsCache.length; i++) {
+    var s = hotelsCache[i];
+    var name = s.hotel_name;
+    if (!name) continue;
+    if (!hotelsByName[name]) hotelsByName[name] = { count: 0, dates: {} };
+    hotelsByName[name].count++;
+    var start = normalizeDate(s.start_date);
+    var dur = Math.max(1, parseInt(s.duration, 10) || 1);
+    for (var k = 0; k < dur; k++) {
+      hotelsByName[name].dates[addDaysStr(start, k)] = true;
+    }
+  }
+}
+
+// 渲染“我的酒店”标签区
+function renderHotelsNames() {
+  var wrap = document.getElementById('hotelsNamesWrap');
+  var list = document.getElementById('hotelsNamesList');
+  if (!wrap || !list) return;
+  var names = Object.keys(hotelsByName);
+  if (names.length === 0) {
+    wrap.style.display = 'none';
+    return;
+  }
+  wrap.style.display = 'block';
+  // 若高亮酒店已被全部删除，自动取消高亮
+  if (hotelsHighlightName && !hotelsByName[hotelsHighlightName]) hotelsHighlightName = null;
+  var html = '';
+  for (var i = 0; i < names.length; i++) {
+    var name = names[i];
+    var info = hotelsByName[name];
+    var active = hotelsHighlightName === name;
+    html += '<button class="hotels-name-tag' + (active ? ' hotels-name-tag-active' : '') + '" data-name="' + esc(name) + '" onclick="hotelsToggleHighlight(this)" title="点击高亮 ' + esc(name) + ' 的所有入住日期，再次点击取消">' + esc(name) + '<span class="hotels-name-tag-count">×' + info.count + '</span></button>';
+  }
+  list.innerHTML = html;
+  var clearBtn = document.getElementById('hotelsNamesClearBtn');
+  if (clearBtn) clearBtn.style.display = hotelsHighlightName ? 'inline-flex' : 'none';
+}
+
+// 点击酒店标签：切换高亮
+function hotelsToggleHighlight(el) {
+  if (!el) return;
+  var name = el.getAttribute('data-name');
+  if (!name) return;
+  if (hotelsHighlightName === name) {
+    hotelsClearHighlight();
+  } else {
+    hotelsHighlightName = name;
+    renderHotelsNames();
+    renderHotelsCalendar();
+  }
+}
+
+// 取消高亮，恢复普通日历视图
+function hotelsClearHighlight() {
+  hotelsHighlightName = null;
+  renderHotelsNames();
+  renderHotelsCalendar();
+}
 
 function renderHotelsStats() {
   // 总间夜数 = 所有记录的连住天数之和
@@ -3067,11 +3137,18 @@ function renderHotelsCalendar() {
     var hasCheckIn = staysOnDate && staysOnDate.length > 0;
     var stays = hasCheckIn ? staysOnDate : [];
 
+    // 高亮选中酒店覆盖的日期（含连住延续日）
+    var isHighlight = false;
+    if (hotelsHighlightName && hotelsByName[hotelsHighlightName] && hotelsByName[hotelsHighlightName].dates[dateStr]) {
+      isHighlight = true;
+    }
+
     var cls = 'hotels-day';
     if (isToday) cls += ' hotels-day-today';
     if (hasCheckIn) cls += ' hotels-day-checkin';
+    if (isHighlight) cls += ' hotels-day-highlight';
 
-    html += '<div class="' + cls + '" onclick="openHotelDayModal(\'' + dateStr + '\')" style="cursor:pointer;" title="' + (hasCheckIn ? ('当天入住 ' + stays.length + ' 家酒店，点击查看管理') : '点击查看当天入住记录') + '">';
+    html += '<div id="hcal_' + dateStr + '" class="' + cls + '" onclick="openHotelDayModal(\'' + dateStr + '\')" style="cursor:pointer;" title="' + (hasCheckIn ? ('当天入住 ' + stays.length + ' 家酒店，点击查看管理') : '点击查看当天入住记录') + '">';
     html += '<span class="hotels-day-num">' + d + '</span>';
     if (hasCheckIn) {
       // 每条记录单独一行：起始日显示酒店名 + 积分 + 到账状态（✓/✗）；连住延续日显示“续”标记，不重复计积分
@@ -3080,7 +3157,9 @@ function renderHotelsCalendar() {
         var st = stays[i];
         var isStart = normalizeDate(st.start_date) === dateStr;
         var pts = parseInt(st.points, 10) || 0;
-        html += '<span class="hotels-day-hotel-row" title="' + esc(st.hotel_name) + '">';
+        var rowCls = 'hotels-day-hotel-row';
+        if (hotelsHighlightName && st.hotel_name === hotelsHighlightName) rowCls += ' hotels-day-hotel-row-selected';
+        html += '<span class="' + rowCls + '" title="' + esc(st.hotel_name) + '">';
         html += '<span class="hotels-day-dot' + (st.is_credited ? ' hotels-day-dot-credited' : '') + '" style="background:' + hotelsDotColors[i % hotelsDotColors.length] + '"></span>';
         html += '<span class="hotels-day-hotel">' + esc(st.hotel_name) + '</span>';
         if (isStart) {
