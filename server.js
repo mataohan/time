@@ -998,6 +998,67 @@ app.get('/api/expenses/stats', authMiddleware, async (req, res) => {
   });
 });
 
+// 支出分析：按分类统计指定年份（可指定月份）的支出与占比
+app.get('/api/expenses/analysis', authMiddleware, async (req, res) => {
+  try {
+    const { year, month } = req.query;
+
+    // year 必填且有效
+    if (!year || String(year).trim() === '') {
+      return res.status(400).json({ error: 'year 参数必填' });
+    }
+    const y = parseInt(year);
+    if (!y || y < 2000 || y > 2100) {
+      return res.status(400).json({ error: 'year 参数无效' });
+    }
+
+    // month 可选（不传/空/all 表示全年）
+    let m = null;
+    const monthStr = String(month || '').trim();
+    if (monthStr && monthStr !== 'all') {
+      m = parseInt(monthStr);
+      if (!m || m < 1 || m > 12) {
+        return res.status(400).json({ error: 'month 参数无效' });
+      }
+    }
+
+    let where = 'WHERE user_id = ? AND YEAR(expense_date) = ?';
+    const params = [req.userId, y];
+    if (m) {
+      where += ' AND MONTH(expense_date) = ?';
+      params.push(m);
+    }
+
+    const totalRow = await db.get(
+      'SELECT COALESCE(SUM(amount), 0) AS total FROM expenses ' + where,
+      params
+    );
+    const total = parseFloat(totalRow.total) || 0;
+
+    const catRows = await db.all(
+      'SELECT category, COALESCE(SUM(amount), 0) AS total FROM expenses ' + where +
+      ' GROUP BY category ORDER BY total DESC',
+      params
+    );
+
+    const categories = (catRows || []).map(function (r) {
+      const catTotal = parseFloat(r.total) || 0;
+      return {
+        category: r.category,
+        total: catTotal,
+        // 保留一位小数
+        percentage: total > 0 ? Math.round((catTotal / total) * 1000) / 10 : 0
+      };
+    });
+
+    console.log(`[Expense Analysis] year=${y}, month=${m || '全年'}, 分类数=${categories.length}, 总支出=${total}`);
+    res.json({ categories, total, year: y, month: m });
+  } catch (err) {
+    console.error('[Expense Analysis] 错误:', err.message);
+    res.status(500).json({ error: '支出分析失败' });
+  }
+});
+
 // ========== 箍牙提醒路由 ==========
 
 // 获取当前用户的箍牙记录（返回最新一条）

@@ -308,6 +308,28 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;bottom:0;background:
 .expense-month-picker{display:flex;gap:8px;align-items:center}
 .expense-month-picker select{padding:12px 18px;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text-primary);font-size:15px;cursor:pointer;outline:none;min-height:44px}
 .expense-month-picker select:focus{border-color:var(--accent)}
+.btn-analysis{padding:12px 20px;background:linear-gradient(135deg,#26a69a,#00897b);border:none;border-radius:var(--radius-sm);color:#fff;font-size:15px;font-weight:600;cursor:pointer;transition:var(--transition);box-shadow:0 3px 10px rgba(38,166,154,.25);white-space:nowrap;min-height:44px}
+.btn-analysis:hover{transform:translateY(-1px);box-shadow:0 5px 16px rgba(38,166,154,.35)}
+/* 支出分析面板 */
+.exp-analysis-panel{width:min(560px,92vw);max-height:82vh;overflow-y:auto}
+.exp-analysis-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.exp-analysis-head h3{margin:0;font-size:19px;font-weight:700}
+.exp-analysis-controls{display:flex;gap:10px;margin-bottom:16px}
+.exp-analysis-controls select{padding:10px 16px;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text-primary);font-size:15px;cursor:pointer;outline:none;min-height:42px;transition:var(--transition);flex:1}
+.exp-analysis-controls select:focus{border-color:var(--accent)}
+.exp-analysis-loading{text-align:center;padding:40px 0;color:var(--text-secondary)}
+.exp-analysis-error{padding:28px 16px;text-align:center;color:var(--danger);background:rgba(239,83,80,.08);border:1px solid rgba(239,83,80,.25);border-radius:var(--radius-sm)}
+.exp-analysis-total-row{display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:16px 20px;background:linear-gradient(135deg,rgba(38,166,154,.12),rgba(0,137,123,.08));border:1px solid rgba(38,166,154,.3);border-radius:var(--radius-sm);margin-bottom:18px}
+.exp-analysis-total-label{font-size:14px;color:var(--text-secondary)}
+.exp-analysis-total-value{font-size:30px;font-weight:800;color:#26a69a}
+.exp-analysis-empty{text-align:center;padding:36px 0;color:var(--text-secondary)}
+.exp-analysis-list{display:flex;flex-direction:column;gap:16px}
+.exp-analysis-item-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:7px}
+.exp-analysis-cat{display:inline-flex;align-items:center;gap:8px;font-size:15px;font-weight:600;color:var(--text-primary)}
+.exp-analysis-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.exp-analysis-val{font-size:13px;color:var(--text-secondary);white-space:nowrap}
+.exp-analysis-bar{height:10px;background:var(--bg-input);border-radius:6px;overflow:hidden;border:1px solid var(--border)}
+.exp-analysis-bar-fill{height:100%;border-radius:6px;transition:width .4s ease}
 /* 记账筛选栏 */
 .expense-filter-bar{display:flex;gap:12px;align-items:center;flex-wrap:wrap;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:16px 24px}
 .expense-filter-label{font-size:15px;font-weight:600;color:var(--text-secondary);white-space:nowrap}

@@ -187,6 +187,13 @@ const API = {
     if (maxAmount) url += '&maxAmount=' + encodeURIComponent(maxAmount);
     return API.get(url);
   },
+  // 支出分析：year 必填，month 可选（不传则统计全年）
+  getExpenseAnalysis: (year, month) => {
+    var url = '/api/expenses/analysis?year=' + encodeURIComponent(year);
+    if (month) url += '&month=' + encodeURIComponent(month);
+    console.log('[请求] GET ' + url);
+    return API.get(url);
+  },
 
   // ---- 宠物档案 ----
   getPets: () => API.get('/api/pets'),
@@ -1252,6 +1259,106 @@ async function saveCompletionNote(id) {
     await loadTasks();
     toast(note ? '完成说明已保存' : '完成说明已清空');
   } catch (err) { toast(err.message, 'error'); }
+}
+
+// ==================== 支出分析 ====================
+var expAnalysisYear = null;   // 分析面板年份
+var expAnalysisMonth = null;  // 分析面板月份（null = 全年）
+var expAnalysisColors = ['#4caf50', '#42a5f5', '#ffa726', '#ab47bc', '#ec407a', '#26a69a', '#ef5350', '#7e57c2', '#ff7043', '#66bb6a', '#5c6bc0', '#ffca28'];
+
+// 打开支出分析面板
+function openExpenseAnalysis() {
+  var now = new Date();
+  expAnalysisYear = String(now.getFullYear());
+  expAnalysisMonth = null; // 默认统计全年
+  var html = '<div class="exp-analysis-panel">';
+  html += '<div class="exp-analysis-head">';
+  html += '<h3>📊 支出分析</h3>';
+  html += '<button class="hotels-day-panel-close" onclick="closeModal()" title="关闭">✕</button>';
+  html += '</div>';
+  html += '<div class="exp-analysis-controls">';
+  html += '<select id="expAnalysisYearSel" onchange="expAnalysisReload()"></select>';
+  html += '<select id="expAnalysisMonthSel" onchange="expAnalysisReload()"><option value="">全年</option>';
+  for (var m2 = 1; m2 <= 12; m2++) html += '<option value="' + m2 + '">' + m2 + '月</option>';
+  html += '</select>';
+  html += '</div>';
+  html += '<div id="expAnalysisBody"><div class="exp-analysis-loading">加载中…</div></div>';
+  html += '</div>';
+  openCustomModal(html);
+  populateExpAnalysisSelects();
+  loadExpenseAnalysis();
+}
+
+// 填充分析面板年份选择器
+function populateExpAnalysisSelects() {
+  var ySel = document.getElementById('expAnalysisYearSel');
+  if (!ySel) return;
+  var now = new Date();
+  var cy = now.getFullYear();
+  ySel.innerHTML = '';
+  for (var y = cy - 2; y <= cy + 1; y++) {
+    ySel.innerHTML += '<option value="' + y + '" ' + (String(y) === String(expAnalysisYear) ? 'selected' : '') + '>' + y + '年</option>';
+  }
+  var mSel = document.getElementById('expAnalysisMonthSel');
+  if (mSel) mSel.value = expAnalysisMonth || '';
+}
+
+// 分析面板选择器变化时重新加载
+function expAnalysisReload() {
+  var ySel = document.getElementById('expAnalysisYearSel');
+  var mSel = document.getElementById('expAnalysisMonthSel');
+  if (!ySel) return;
+  expAnalysisYear = ySel.value;
+  expAnalysisMonth = mSel ? (mSel.value || null) : null;
+  loadExpenseAnalysis();
+}
+
+// 加载并渲染支出分析
+async function loadExpenseAnalysis() {
+  var body = document.getElementById('expAnalysisBody');
+  if (!body) return;
+  body.innerHTML = '<div class="exp-analysis-loading">加载中…</div>';
+  try {
+    var data = await API.getExpenseAnalysis(expAnalysisYear, expAnalysisMonth || '');
+    if (document.getElementById('expAnalysisBody') !== body) return;
+    renderExpenseAnalysis(data);
+  } catch (err) {
+    if (document.getElementById('expAnalysisBody') !== body) return;
+    body.innerHTML = '<div class="exp-analysis-error">分析加载失败: ' + esc(err.message) + '</div>';
+  }
+}
+
+// 渲染分类占比列表
+function renderExpenseAnalysis(data) {
+  var body = document.getElementById('expAnalysisBody');
+  if (!body) return;
+  var total = parseFloat(data.total) || 0;
+  var periodLabel = data.month ? (data.year + '年' + data.month + '月') : (data.year + '年（全年）');
+  var cats = data.categories || [];
+  var html = '';
+  html += '<div class="exp-analysis-total-row">';
+  html += '<span class="exp-analysis-total-label">' + periodLabel + ' 总支出</span>';
+  html += '<span class="exp-analysis-total-value">¥ ' + total.toFixed(2) + '</span>';
+  html += '</div>';
+  if (cats.length === 0) {
+    html += '<div class="exp-analysis-empty"><div class="empty-icon">💸</div><p>该期间暂无支出记录</p></div>';
+  } else {
+    html += '<div class="exp-analysis-list">';
+    for (var i = 0; i < cats.length; i++) {
+      var c = cats[i];
+      var pct = typeof c.percentage === 'number' ? c.percentage : 0;
+      var color = expAnalysisColors[i % expAnalysisColors.length];
+      html += '<div class="exp-analysis-item">';
+      html += '<div class="exp-analysis-item-head">';
+      html += '<span class="exp-analysis-cat"><span class="exp-analysis-dot" style="background:' + color + '"></span>' + esc(c.category) + '</span>';
+      html += '<span class="exp-analysis-val">¥ ' + (parseFloat(c.total) || 0).toFixed(2) + ' · ' + pct + '%</span>';
+      html += '</div>';
+      html += '<div class="exp-analysis-bar"><div class="exp-analysis-bar-fill" style="width:' + Math.min(100, Math.max(0, pct)) + '%;background:' + color + '"></div></div>';
+      html += '</div>';
+    }
+    html += '</div>';
+  }
+  body.innerHTML = html;
 }
 
 // ==================== 记账 ====================
