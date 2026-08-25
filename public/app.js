@@ -3156,9 +3156,8 @@ function renderHotelDayPanel(dateStr) {
 
   if (hasStartToday && totalPoints > 0) html += '<div class="hotels-day-list-total">当日新增 ' + totalPoints + ' 分</div>';
 
-  if (stays.length === 0) {
-    html += '<div class="hotels-day-list-empty">当天暂无入住记录，点击下方按钮添加。</div>';
-  } else {
+  // 已有记录列表（显示在表单上方）
+  if (stays.length > 0) {
     html += '<div class="hotels-day-list">';
     for (var i = 0; i < stays.length; i++) {
       var s = stays[i];
@@ -3188,11 +3187,8 @@ function renderHotelDayPanel(dateStr) {
     html += '</div>';
   }
 
-  // 添加按钮：点击后在按钮下方原地展开新增表单
-  html += '<div class="hotels-day-panel-add">';
-  html += '<button class="hotels-day-panel-add-btn" id="hotelPanelAddBtn" onclick="hotelPanelAddForm(\'' + dateStr + '\')">+ 添加酒店</button>';
-  html += '</div>';
-  html += '<div id="hotelPanelFormSlot"></div>';
+  // 新增表单：始终显示（列表下方），填写保存后可继续添加
+  html += '<div id="hotelPanelAddForm">' + hotelPanelFormHtml(null, dateStr) + '</div>';
 
   html += '<div class="modal-actions form-group-full"><button class="btn-cancel" onclick="closeModal()">关闭</button></div>';
   html += '</div>';
@@ -3232,21 +3228,7 @@ function hotelPanelFormHtml(stay, defaultDate) {
   return html;
 }
 
-// 点击“+ 添加酒店”：在按钮下方原地展开新增表单
-function hotelPanelAddForm(dateStr) {
-  var slot = document.getElementById('hotelPanelFormSlot');
-  var addBtn = document.getElementById('hotelPanelAddBtn');
-  if (!slot) return;
-  slot.innerHTML = hotelPanelFormHtml(null, dateStr);
-  if (addBtn) addBtn.style.display = 'none';
-  setTimeout(function () {
-    slot.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    var el = document.getElementById('hHotelName');
-    if (el) el.focus();
-  }, 60);
-}
-
-// 点击“编辑”：该记录在列表内原地展开编辑表单
+// 点击“编辑”：该记录在列表内原地展开编辑表单（同时收起底部新增表单，避免字段冲突）
 function hotelPanelEdit(id) {
   var stay = null;
   for (var i = 0; i < hotelsCache.length; i++) {
@@ -3255,6 +3237,8 @@ function hotelPanelEdit(id) {
   if (!stay) { toast('记录不存在', 'error'); return; }
   var row = document.getElementById('hstRow_' + id);
   if (!row) return;
+  var addForm = document.getElementById('hotelPanelAddForm');
+  if (addForm) addForm.style.display = 'none';
   row.className = 'hotels-day-list-item hotels-day-list-item-editing';
   row.innerHTML = hotelPanelFormHtml(stay, null);
   setTimeout(function () {
