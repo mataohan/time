@@ -222,7 +222,17 @@ const API = {
   createHotel: (b) => API.post('/api/hotels', b),
   updateHotel: (id, b) => API.put('/api/hotels/' + id, b),
   deleteHotel: (id) => API.del('/api/hotels/' + id),
-  checkHotel: (name) => API.get('/api/hotels/check?hotel_name=' + encodeURIComponent(name))
+  checkHotel: (name) => API.get('/api/hotels/check?hotel_name=' + encodeURIComponent(name)),
+
+  // ---- 用药记录 ----
+  getMedications: () => API.get('/api/medications'),
+  createMedication: (b) => API.post('/api/medications', b),
+  updateMedication: (id, b) => API.put('/api/medications/' + id, b),
+  deleteMedication: (id) => API.del('/api/medications/' + id),
+  getMedicationLogs: (medId) => API.get('/api/medications/' + medId + '/logs'),
+  createMedicationLog: (medId, b) => API.post('/api/medications/' + medId + '/logs', b),
+  updateMedicationLog: (medId, logId, b) => API.put('/api/medications/' + medId + '/logs/' + logId, b),
+  deleteMedicationLog: (medId, logId) => API.del('/api/medications/' + medId + '/logs/' + logId)
 };
 
 // ==================== 全局状态 ====================
@@ -270,6 +280,9 @@ for (var _hi = 0; _hi < HEALTH_EVENT_TYPES.length; _hi++) {
 }
 let petsCache = [];
 let petEventCache = {};
+let medicationsCache = [];
+let medLogsCache = {};        // { medicationId: [log, log, ...] }
+let medExpanded = {};         // { medicationId: true/false } 卡片展开状态
 
 // ==================== 工具 ====================
 function toast(msg, type) {
@@ -542,8 +555,21 @@ function switchTab(tab) {
     document.getElementById('petsTab').style.display = 'none';
     document.getElementById('orthodonticTab').style.display = 'none';
     document.getElementById('carbonTab').style.display = 'none';
+    document.getElementById('medicationsTab').style.display = 'none';
     document.getElementById('hotelsTab').style.display = 'block';
     initHotels();
+  } else if (tab === 'medications') {
+    btns[8].classList.add('active');
+    document.getElementById('calendarTab').style.display = 'none';
+    document.getElementById('tasksTab').style.display = 'none';
+    document.getElementById('expensesTab').style.display = 'none';
+    document.getElementById('reportTab').style.display = 'none';
+    document.getElementById('petsTab').style.display = 'none';
+    document.getElementById('orthodonticTab').style.display = 'none';
+    document.getElementById('carbonTab').style.display = 'none';
+    document.getElementById('hotelsTab').style.display = 'none';
+    document.getElementById('medicationsTab').style.display = 'block';
+    loadMedications();
   }
 }
 
@@ -3771,4 +3797,316 @@ async function searchHotel() {
   } catch (err) {
     toast('查询失败: ' + err.message, 'error');
   }
+}
+
+// ==================== 用药记录板块 ====================
+
+// 当前本地时间字符串 'YYYY-MM-DDTHH:mm'（用于 datetime-local 默认值）
+function nowLocalForInput() {
+  var d = new Date();
+  var y = d.getFullYear();
+  var mo = String(d.getMonth() + 1).padStart(2, '0');
+  var da = String(d.getDate()).padStart(2, '0');
+  var h = String(d.getHours()).padStart(2, '0');
+  var mi = String(d.getMinutes()).padStart(2, '0');
+  return y + '-' + mo + '-' + da + 'T' + h + ':' + mi;
+}
+
+// 药物图片加载失败时的占位
+function handleMedImgError(img) {
+  // 替换为药丸图标占位
+  var parent = img.parentNode;
+  if (!parent) return;
+  parent.innerHTML = '<div class="med-card-thumb-placeholder">💊</div>';
+}
+
+async function loadMedications() {
+  try {
+    var result = await API.getMedications();
+    medicationsCache = result.medications || [];
+    // 默认所有卡片折叠（避免初次加载时全部展开造成视觉混乱）
+    var newExpanded = {};
+    for (var i = 0; i < medicationsCache.length; i++) {
+      var id = medicationsCache[i].id;
+      if (medExpanded[id]) newExpanded[id] = true;
+    }
+    medExpanded = newExpanded;
+    renderMedicationsList();
+  } catch (err) {
+    toast('加载药物失败: ' + err.message, 'error');
+  }
+}
+
+function renderMedicationsList() {
+  var grid = document.getElementById('medsGrid');
+  if (!grid) return;
+
+  if (!medicationsCache || medicationsCache.length === 0) {
+    grid.innerHTML = '<div class="empty-state"><div class="empty-icon">💊</div><p>还没有添加药物，点击上方按钮添加吧</p></div>';
+    return;
+  }
+
+  var html = '';
+  for (var i = 0; i < medicationsCache.length; i++) {
+    var m = medicationsCache[i];
+    var expanded = !!medExpanded[m.id];
+    var logs = medLogsCache[m.id] || null;
+
+    html += '<div class="med-card' + (expanded ? ' expanded' : '') + '" data-med-id="' + m.id + '">';
+    // 卡片头部：缩略图 + 名称 + 折叠箭头
+    html += '<div class="med-card-head" onclick="toggleMedCard(' + m.id + ')">';
+    html += '<div class="med-card-thumb">';
+    if (m.image_url) {
+      html += '<img src="' + esc(m.image_url) + '" alt="' + esc(m.name) + '" onerror="handleMedImgError(this)" loading="lazy">';
+    } else {
+      html += '<div class="med-card-thumb-placeholder">💊</div>';
+    }
+    html += '</div>';
+    html += '<div class="med-card-meta">';
+    html += '<div class="med-card-name"><span class="med-card-name-text">' + esc(m.name) + '</span></div>';
+    if (logs && logs.length > 0) {
+      html += '<div style="font-size:12px;color:var(--text-muted);">共 ' + logs.length + ' 条用药记录</div>';
+    } else {
+      html += '<div style="font-size:12px;color:var(--text-muted);">暂无用药记录</div>';
+    }
+    html += '</div>';
+    html += '<div class="med-card-toggle">▾</div>';
+    html += '</div>';
+
+    // 备注
+    if (m.notes) {
+      html += '<div class="med-card-notes">' + esc(m.notes) + '</div>';
+    }
+
+    // 操作按钮
+    html += '<div class="med-card-actions">';
+    html += '<button class="med-action-btn" onclick="event.stopPropagation();openMedicationModal(' + m.id + ')">✏️ 编辑</button>';
+    html += '<button class="med-action-btn med-action-del" onclick="event.stopPropagation();deleteMedication(' + m.id + ')">🗑️ 删除</button>';
+    html += '</div>';
+
+    // 用药记录区域
+    html += '<div class="med-logs-wrap">';
+    html += '<div class="med-logs-head">';
+    html += '<span class="med-logs-title">📋 用药记录</span>';
+    html += '<button class="med-logs-add" onclick="event.stopPropagation();openMedicationLogModal(' + m.id + ')">+ 记录一次用药</button>';
+    html += '</div>';
+    html += '<div class="med-logs-list" id="medLogsList_' + m.id + '">';
+    html += renderMedLogsInner(m.id, logs);
+    html += '</div>';
+    html += '</div>';
+
+    html += '</div>';
+  }
+  grid.innerHTML = html;
+}
+
+function renderMedLogsInner(medId, logs) {
+  if (!logs || logs.length === 0) {
+    return '<div class="med-logs-empty">暂无用药记录，点击下方按钮添加</div>';
+  }
+  var html = '';
+  for (var i = 0; i < logs.length; i++) {
+    var l = logs[i];
+    var time = l.taken_at || '';
+    var dose = l.dosage || '';
+    html += '<div class="med-log-item" data-log-id="' + l.id + '">';
+    html += '<div class="med-log-dot"></div>';
+    html += '<div class="med-log-body">';
+    html += '<div class="med-log-top">';
+    html += '<span class="med-log-time">' + esc(time) + '</span>';
+    if (dose) html += '<span class="med-log-dose">' + esc(dose) + '</span>';
+    html += '</div>';
+    if (l.notes) html += '<div class="med-log-notes">' + esc(l.notes) + '</div>';
+    html += '</div>';
+    html += '<div class="med-log-actions">';
+    html += '<button class="med-log-btn" onclick="event.stopPropagation();openMedicationLogModal(' + medId + ', ' + l.id + ')" title="编辑">✏️</button>';
+    html += '<button class="med-log-btn med-log-btn-del" onclick="event.stopPropagation();deleteMedicationLog(' + medId + ', ' + l.id + ')" title="删除">🗑️</button>';
+    html += '</div>';
+    html += '</div>';
+  }
+  return html;
+}
+
+// 切换药物卡片展开/收起
+async function toggleMedCard(medId) {
+  var wasExpanded = !!medExpanded[medId];
+  medExpanded[medId] = !wasExpanded;
+
+  // 更新 DOM 中对应的卡片 class
+  var cards = document.querySelectorAll('.med-card[data-med-id="' + medId + '"]');
+  for (var i = 0; i < cards.length; i++) {
+    if (wasExpanded) cards[i].classList.remove('expanded');
+    else cards[i].classList.add('expanded');
+  }
+
+  // 展开时若尚未加载该药物的用药记录，则请求一次
+  if (!wasExpanded && !medLogsCache[medId]) {
+    try {
+      var result = await API.getMedicationLogs(medId);
+      medLogsCache[medId] = result.logs || [];
+      // 仅刷新该药物的列表区域
+      var listEl = document.getElementById('medLogsList_' + medId);
+      if (listEl) {
+        listEl.innerHTML = renderMedLogsInner(medId, medLogsCache[medId]);
+      }
+      // 更新头部"共 N 条"提示
+      var card = document.querySelector('.med-card[data-med-id="' + medId + '"] .med-card-meta');
+      if (card) {
+        var count = medLogsCache[medId].length;
+        var infoRow = card.querySelector('div[style]');
+        if (infoRow) infoRow.textContent = count > 0 ? ('共 ' + count + ' 条用药记录') : '暂无用药记录';
+      }
+    } catch (err) {
+      toast('加载用药记录失败: ' + err.message, 'error');
+    }
+  }
+}
+
+// ---- 药物弹窗 ----
+function openMedicationModal(id) {
+  var med = id ? medicationsCache.find(function (m) { return m.id == id; }) : null;
+  var isEdit = !!med;
+  stopDraftAutoSave();
+  modalDirty = false;
+
+  document.getElementById('modalContent').innerHTML =
+    '<h3>' + (isEdit ? '编辑药物' : '添加药物') + '</h3>' +
+    '<div class="modal-form-grid">' +
+    '<div class="form-group form-group-full"><label>药物名称 <span style="color:var(--danger)">*</span></label><input type="text" id="medName" value="' + (med ? esc(med.name) : '') + '" placeholder="如：布洛芬、阿莫西林..." maxlength="100" oninput="modalDirty=true"></div>' +
+    '<div class="form-group form-group-full"><label>图片URL（可选）</label><input type="url" id="medImage" value="' + (med && med.image_url ? esc(med.image_url) : '') + '" placeholder="https://example.com/pill.jpg" oninput="modalDirty=true"></div>' +
+    '<div class="form-group form-group-full"><label>备注（可选）</label><textarea id="medNotes" placeholder="如：饭后服用、每日3次、注意事项..." oninput="modalDirty=true">' + (med && med.notes ? esc(med.notes) : '') + '</textarea></div>' +
+    '<div class="modal-actions form-group-full">' +
+    '<button class="btn-cancel" onclick="closeModal()">取消</button>' +
+    '<button class="btn-submit" onclick="saveMedication(' + (id || '') + ')">' + (isEdit ? '保存修改' : '添加药物') + '</button>' +
+    '</div></div>';
+  document.getElementById('modalOverlay').style.display = 'flex';
+  setTimeout(function () {
+    var el = document.getElementById('medName');
+    if (el) el.focus();
+  }, 100);
+}
+
+async function saveMedication(id) {
+  var name = document.getElementById('medName').value.trim();
+  var image_url = document.getElementById('medImage').value.trim() || null;
+  var notes = document.getElementById('medNotes').value;
+  if (!name) { toast('请输入药物名称', 'error'); return; }
+  if (image_url && image_url.length > 500) { toast('图片URL长度不能超过500字符', 'error'); return; }
+
+  try {
+    var payload = { name: name, image_url: image_url, notes: notes };
+    if (id) {
+      await API.updateMedication(id, payload);
+      toast('药物信息已更新');
+    } else {
+      await API.createMedication(payload);
+      toast('药物已添加 💊');
+    }
+    modalDirty = false;
+    closeModal();
+    await loadMedications();
+  } catch (err) { toast(err.message, 'error'); }
+}
+
+async function deleteMedication(id) {
+  var med = medicationsCache.find(function (m) { return m.id == id; });
+  var msg = '确定删除「' + (med ? med.name : '该药物') + '」吗？';
+  msg += '\n该药物的所有用药记录也会被一起删除，此操作不可撤销。';
+  if (!confirm(msg)) return;
+  try {
+    var result = await API.deleteMedication(id);
+    var cnt = (result && result.deleted_logs) || 0;
+    delete medLogsCache[id];
+    delete medExpanded[id];
+    await loadMedications();
+    toast('药物已删除' + (cnt > 0 ? '（含 ' + cnt + ' 条用药记录）' : ''));
+  } catch (err) { toast(err.message, 'error'); }
+}
+
+// ---- 用药记录弹窗 ----
+function openMedicationLogModal(medId, logId) {
+  var log = null;
+  if (logId && medLogsCache[medId]) {
+    log = medLogsCache[medId].find(function (l) { return l.id == logId; });
+  }
+  var isEdit = !!log;
+  stopDraftAutoSave();
+  modalDirty = false;
+
+  // taken_at 默认值：编辑时取已有时间，新增时取当前时间
+  var defaultTime = log && log.taken_at ? log.taken_at.replace(' ', 'T') : nowLocalForInput();
+
+  document.getElementById('modalContent').innerHTML =
+    '<h3>' + (isEdit ? '编辑用药记录' : '记录一次用药') + '</h3>' +
+    '<div class="modal-form-grid">' +
+    '<div class="form-group form-group-col"><label>服用时间 <span style="color:var(--danger)">*</span></label><input type="datetime-local" id="medLogTime" value="' + esc(defaultTime) + '" onchange="modalDirty=true"></div>' +
+    '<div class="form-group form-group-col"><label>剂量</label><input type="text" id="medLogDose" value="' + (log && log.dosage ? esc(log.dosage) : '') + '" placeholder="如：1片、5ml" maxlength="50" oninput="modalDirty=true"></div>' +
+    '<div class="form-group form-group-full"><label>备注</label><textarea id="medLogNotes" placeholder="如：服用后的反应、症状变化..." oninput="modalDirty=true">' + (log && log.notes ? esc(log.notes) : '') + '</textarea></div>' +
+    '<div class="modal-actions form-group-full">' +
+    '<button class="btn-cancel" onclick="closeModal()">取消</button>' +
+    '<button class="btn-submit" onclick="saveMedicationLog(' + medId + ', ' + (logId || '') + ')">' + (isEdit ? '保存修改' : '保存记录') + '</button>' +
+    '</div></div>';
+  document.getElementById('modalOverlay').style.display = 'flex';
+}
+
+async function saveMedicationLog(medId, logId) {
+  var timeVal = document.getElementById('medLogTime').value;
+  if (!timeVal) { toast('请选择服用时间', 'error'); return; }
+  // datetime-local 返回 'YYYY-MM-DDTHH:mm'，后端 toDateTimeStr 兼容；显式补全秒可避免时区问题
+  var taken_at = timeVal.length === 16 ? timeVal + ':00' : timeVal;
+  var dosage = document.getElementById('medLogDose').value.trim();
+  var notes = document.getElementById('medLogNotes').value;
+
+  try {
+    var payload = { taken_at: taken_at, dosage: dosage, notes: notes };
+    if (logId) {
+      await API.updateMedicationLog(medId, logId, payload);
+      toast('用药记录已更新');
+    } else {
+      await API.createMedicationLog(medId, payload);
+      toast('已记录一次用药 ✅');
+    }
+    modalDirty = false;
+    closeModal();
+    // 刷新该药物的日志缓存并更新列表
+    var result = await API.getMedicationLogs(medId);
+    medLogsCache[medId] = result.logs || [];
+    var listEl = document.getElementById('medLogsList_' + medId);
+    if (listEl) {
+      listEl.innerHTML = renderMedLogsInner(medId, medLogsCache[medId]);
+    }
+    // 更新顶部"共 N 条"
+    var card = document.querySelector('.med-card[data-med-id="' + medId + '"] .med-card-meta');
+    if (card) {
+      var infoRow = card.querySelector('div[style]');
+      if (infoRow) {
+        var n = medLogsCache[medId].length;
+        infoRow.textContent = n > 0 ? ('共 ' + n + ' 条用药记录') : '暂无用药记录';
+      }
+    }
+  } catch (err) { toast(err.message, 'error'); }
+}
+
+async function deleteMedicationLog(medId, logId) {
+  if (!confirm('确定删除这条用药记录吗？')) return;
+  try {
+    await API.deleteMedicationLog(medId, logId);
+    // 局部刷新该药物的列表
+    if (medLogsCache[medId]) {
+      medLogsCache[medId] = medLogsCache[medId].filter(function (l) { return l.id != logId; });
+    }
+    var listEl = document.getElementById('medLogsList_' + medId);
+    if (listEl) {
+      listEl.innerHTML = renderMedLogsInner(medId, medLogsCache[medId]);
+    }
+    var card = document.querySelector('.med-card[data-med-id="' + medId + '"] .med-card-meta');
+    if (card) {
+      var infoRow = card.querySelector('div[style]');
+      if (infoRow) {
+        var n = (medLogsCache[medId] || []).length;
+        infoRow.textContent = n > 0 ? ('共 ' + n + ' 条用药记录') : '暂无用药记录';
+      }
+    }
+    toast('用药记录已删除');
+  } catch (err) { toast(err.message, 'error'); }
 }

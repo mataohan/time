@@ -299,6 +299,42 @@ async function initDB() {
     console.warn('[INIT] start_date 列类型迁移跳过:', e.message);
   }
 
+  // v3.5 用药记录：创建 medications 表（药物信息）
+  await db.exec(`
+    CREATE TABLE IF NOT EXISTS medications (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      user_id INT NOT NULL,
+      name VARCHAR(100) NOT NULL,
+      image_url VARCHAR(500),
+      notes TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `);
+
+  // v3.5 用药记录：创建 medication_logs 表（用药记录，关联 medications）
+  await db.exec(`
+    CREATE TABLE IF NOT EXISTS medication_logs (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      medication_id INT NOT NULL,
+      taken_at DATETIME NOT NULL,
+      dosage VARCHAR(50),
+      notes TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      FOREIGN KEY (medication_id) REFERENCES medications(id) ON DELETE CASCADE
+    )
+  `);
+
+  // v3.5 用药记录索引：加速按 medication_id + taken_at 倒序查询
+  try {
+    await db.exec('CREATE INDEX idx_medication_logs_med_taken ON medication_logs (medication_id, taken_at DESC)');
+  } catch (e) { /* 索引可能已存在，忽略 */ }
+  try {
+    await db.exec('CREATE INDEX idx_medications_user_created ON medications (user_id, created_at DESC)');
+  } catch (e) { /* 索引可能已存在，忽略 */ }
+
   console.log(`✅ 数据库表初始化完成 (${process.env.DATABASE_URL ? 'TiDB Cloud' : 'SQLite'})`);
 }
 
@@ -1595,6 +1631,271 @@ app.delete('/api/pets/:petId/events/:eventId', authMiddleware, async (req, res) 
   );
   if (changes === 0) return res.status(404).json({ error: '健康事件不存在' });
   res.json({ message: '健康事件已删除' });
+});
+
+// ========== 用药记录路由 ==========
+
+// 获取当前用户的所有药物（按创建时间倒序）
+app.get('/api/medications', authMiddleware, async (req, res) => {
+  const medications = await db.all(
+    'SELECT * FROM medications WHERE user_id = ? ORDER BY created_at DESC',
+    [req.userId]
+  );
+  res.json({ medications });
+});
+
+// 新增药物
+app.post('/api/medications', authMiddleware, async (req, res) => {
+  try {
+    const { name, image_url, notes } = req.body || {};
+    if (!name || !String(name).trim()) {
+      return res.status(400).json({ error: '药物名称不能为空' });
+    }
+    const safeName = String(name).trim().substring(0, 100);
+    const img = image_url && String(image_url).trim() ? String(image_url).trim().substring(0, 500) : null;
+    const note = notes !== undefined ? String(notes) : '';
+
+    const med = await db.insert(
+      'INSERT INTO medications (user_id, name, image_url, notes) VALUES (?, ?, ?, ?)',
+      [req.userId, safeName, img, note]
+    );
+    const created = await db.get('SELECT * FROM medications WHERE id = ?', [med.id]);
+    res.json({ message: '药物已添加', medication: created });
+  } catch (err) {
+    console.error('[MEDICATIONS] POST /api/medications 服务器错误:', err.message, err.stack);
+    res.status(500).json({ error: '服务器错误: ' + err.message });
+  }
+});
+
+// 修改药物
+app.put('/api/medications/:id', authMiddleware, async (req, res) => {
+  try {
+    const med = await db.get(
+      'SELECT * FROM medications WHERE id = ? AND user_id = ?',
+      [req.params.id, req.userId]
+    );
+    if (!med) return res.status(404).json({ error: '药物不存在' });
+
+    const { name, image_url, notes } = req.body || {};
+    const newName = name !== undefined && name !== '' ? String(name).trim().substring(0, 100) : med.name;
+    if (!newName) return res.status(400).json({ error: '药物名称不能为空' });
+
+    const newImg = image_url !== undefined
+      ? (image_url && String(image_url).trim() ? String(image_url).trim().substring(0, 500) : null)
+      : med.image_url;
+    const newNotes = notes !== undefined ? String(notes) : (med.notes || '');
+
+    await db.run(
+      `UPDATE medications SET
+         name = ?, image_url = ?, notes = ?, updated_at = CURRENT_TIMESTAMP
+       WHERE id = ? AND user_id = ?`,
+      [newName, newImg, newNotes, req.params.id, req.userId]
+    );
+
+    const updated = await db.get('SELECT * FROM medications WHERE id = ?', [req.params.id]);
+    res.json({ message: '药物信息已更新', medication: updated });
+  } catch (err) {
+    console.error('[MEDICATIONS] PUT /api/medications/:id 服务器错误:', err.message, err.stack);
+    res.status(500).json({ error: '服务器错误: ' + err.message });
+  }
+});
+
+// 删除药物（级联删除其所有用药记录）
+app.delete('/api/medications/:id', authMiddleware, async (req, res) => {
+  try {
+    const med = await db.get(
+      'SELECT * FROM medications WHERE id = ? AND user_id = ?',
+      [req.params.id, req.userId]
+    );
+    if (!med) return res.status(404).json({ error: '药物不存在' });
+
+    // 先统计该药物的用药记录数量（仅用于日志）
+    const logCount = await db.get(
+      'SELECT COUNT(*) as cnt FROM medication_logs WHERE medication_id = ?',
+      [req.params.id]
+    );
+
+    // 删除药物（数据库 ON DELETE CASCADE 会自动删除用药记录）
+    const changes = await db.change(
+      'DELETE FROM medications WHERE id = ? AND user_id = ?',
+      [req.params.id, req.userId]
+    );
+    if (changes === 0) return res.status(404).json({ error: '药物不存在' });
+
+    res.json({
+      message: '药物已删除',
+      deleted_logs: (logCount && logCount.cnt) || 0
+    });
+  } catch (err) {
+    console.error('[MEDICATIONS] DELETE /api/medications/:id 服务器错误:', err.message, err.stack);
+    res.status(500).json({ error: '服务器错误: ' + err.message });
+  }
+});
+
+// ========== 用药记录子路由 ==========
+
+// 校验药物属于当前用户（内部辅助）
+async function assertMedicationOwned(userId, medicationId) {
+  const med = await db.get(
+    'SELECT * FROM medications WHERE id = ? AND user_id = ?',
+    [medicationId, userId]
+  );
+  return med;
+}
+
+// 校验用药记录属于指定药物（内部辅助）
+async function assertLogOwned(medicationId, logId) {
+  return db.get(
+    'SELECT * FROM medication_logs WHERE id = ? AND medication_id = ?',
+    [logId, medicationId]
+  );
+}
+
+// 将 DATETIME 字段统一转为 'YYYY-MM-DD HH:mm' 字符串（本地时区）
+function toDateTimeStr(v) {
+  if (v === null || v === undefined || v === '') return '';
+  if (v instanceof Date) {
+    if (isNaN(v.getTime())) return '';
+    // 使用本地时区（与服务端 timezone 一致），而非 UTC
+    const y = v.getFullYear();
+    const mo = String(v.getMonth() + 1).padStart(2, '0');
+    const d = String(v.getDate()).padStart(2, '0');
+    const h = String(v.getHours()).padStart(2, '0');
+    const mi = String(v.getMinutes()).padStart(2, '0');
+    return y + '-' + mo + '-' + d + ' ' + h + ':' + mi;
+  }
+  const s = String(v);
+  // 兼容 ISO 字符串或 'YYYY-MM-DD HH:mm:ss' 形式
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/);
+  if (m) return m[1] + '-' + m[2] + '-' + m[3] + ' ' + m[4] + ':' + m[5];
+  return s;
+}
+
+// 将 'YYYY-MM-DD HH:mm' / 'YYYY-MM-DDTHH:mm' / Date 转为 Date 对象（无效返回 null）
+function parseLocalDateTime(v) {
+  if (v === null || v === undefined || v === '') return null;
+  if (v instanceof Date) return isNaN(v.getTime()) ? null : v;
+  const s = String(v).trim();
+  // 接受 'YYYY-MM-DD HH:mm' 或 'YYYY-MM-DDTHH:mm' 或 'YYYY-MM-DD HH:mm:ss'
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?/);
+  if (m) {
+    return new Date(
+      parseInt(m[1]), parseInt(m[2]) - 1, parseInt(m[3]),
+      parseInt(m[4]), parseInt(m[5]), m[6] ? parseInt(m[6]) : 0, 0
+    );
+  }
+  // 兜底：仅日期（默认 00:00 本地时区）
+  const dOnly = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (dOnly) {
+    return new Date(parseInt(dOnly[1]), parseInt(dOnly[2]) - 1, parseInt(dOnly[3]), 0, 0, 0, 0);
+  }
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+// 获取某药物的所有用药记录（按 taken_at 倒序）
+app.get('/api/medications/:medicationId/logs', authMiddleware, async (req, res) => {
+  const med = await assertMedicationOwned(req.userId, req.params.medicationId);
+  if (!med) return res.status(404).json({ error: '药物不存在' });
+
+  const logs = await db.all(
+    'SELECT * FROM medication_logs WHERE medication_id = ? ORDER BY taken_at DESC',
+    [req.params.medicationId]
+  );
+  // 统一 taken_at 为 'YYYY-MM-DD HH:mm' 字符串
+  for (const l of logs) {
+    l.taken_at = toDateTimeStr(l.taken_at);
+  }
+  res.json({ logs });
+});
+
+// 新增用药记录
+app.post('/api/medications/:medicationId/logs', authMiddleware, async (req, res) => {
+  try {
+    const med = await assertMedicationOwned(req.userId, req.params.medicationId);
+    if (!med) return res.status(404).json({ error: '药物不存在' });
+
+    const { taken_at, dosage, notes } = req.body || {};
+    const dt = parseLocalDateTime(taken_at);
+    if (!dt) return res.status(400).json({ error: '服用时间格式无效，应为 YYYY-MM-DD HH:mm' });
+
+    const dose = dosage !== undefined && dosage !== '' ? String(dosage).trim().substring(0, 50) : '';
+    const note = notes !== undefined ? String(notes) : '';
+
+    // node:sqlite 绑定参数时不能直接接收 Date 对象，需转为 'YYYY-MM-DD HH:mm:ss' 字符串
+    const dtStr = toDateTimeStr(dt) + ':00';
+
+    const log = await db.insert(
+      'INSERT INTO medication_logs (medication_id, taken_at, dosage, notes) VALUES (?, ?, ?, ?)',
+      [req.params.medicationId, dtStr, dose, note]
+    );
+    const created = await db.get('SELECT * FROM medication_logs WHERE id = ?', [log.id]);
+    if (created) created.taken_at = toDateTimeStr(created.taken_at);
+    res.json({ message: '用药记录已添加', log: created });
+  } catch (err) {
+    console.error('[MEDICATIONS] POST logs 服务器错误:', err.message, err.stack);
+    res.status(500).json({ error: '服务器错误: ' + err.message });
+  }
+});
+
+// 修改用药记录
+app.put('/api/medications/:medicationId/logs/:logId', authMiddleware, async (req, res) => {
+  try {
+    const med = await assertMedicationOwned(req.userId, req.params.medicationId);
+    if (!med) return res.status(404).json({ error: '药物不存在' });
+
+    const log = await assertLogOwned(req.params.medicationId, req.params.logId);
+    if (!log) return res.status(404).json({ error: '用药记录不存在' });
+
+    const { taken_at, dosage, notes } = req.body || {};
+
+    let newTakenAt = log.taken_at;
+    if (taken_at !== undefined) {
+      const dt = parseLocalDateTime(taken_at);
+      if (!dt) return res.status(400).json({ error: '服用时间格式无效，应为 YYYY-MM-DD HH:mm' });
+      newTakenAt = toDateTimeStr(dt) + ':00';
+    }
+
+    const newDose = dosage !== undefined
+      ? (dosage !== '' ? String(dosage).trim().substring(0, 50) : '')
+      : (log.dosage || '');
+    const newNotes = notes !== undefined ? String(notes) : (log.notes || '');
+
+    await db.run(
+      `UPDATE medication_logs SET
+         taken_at = ?, dosage = ?, notes = ?, updated_at = CURRENT_TIMESTAMP
+       WHERE id = ? AND medication_id = ?`,
+      [newTakenAt, newDose, newNotes, req.params.logId, req.params.medicationId]
+    );
+
+    const updated = await db.get('SELECT * FROM medication_logs WHERE id = ?', [req.params.logId]);
+    if (updated) updated.taken_at = toDateTimeStr(updated.taken_at);
+    res.json({ message: '用药记录已更新', log: updated });
+  } catch (err) {
+    console.error('[MEDICATIONS] PUT logs 服务器错误:', err.message, err.stack);
+    res.status(500).json({ error: '服务器错误: ' + err.message });
+  }
+});
+
+// 删除用药记录
+app.delete('/api/medications/:medicationId/logs/:logId', authMiddleware, async (req, res) => {
+  try {
+    const med = await assertMedicationOwned(req.userId, req.params.medicationId);
+    if (!med) return res.status(404).json({ error: '药物不存在' });
+
+    const log = await assertLogOwned(req.params.medicationId, req.params.logId);
+    if (!log) return res.status(404).json({ error: '用药记录不存在' });
+
+    const changes = await db.change(
+      'DELETE FROM medication_logs WHERE id = ? AND medication_id = ?',
+      [req.params.logId, req.params.medicationId]
+    );
+    if (changes === 0) return res.status(404).json({ error: '用药记录不存在' });
+    res.json({ message: '用药记录已删除' });
+  } catch (err) {
+    console.error('[MEDICATIONS] DELETE logs 服务器错误:', err.message, err.stack);
+    res.status(500).json({ error: '服务器错误: ' + err.message });
+  }
 });
 
 // ========== 统计 ==========

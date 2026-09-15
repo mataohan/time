@@ -299,6 +299,76 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;bottom:0;background:
 .health-timeline-actions .btn-task-edit:hover{color:var(--accent)}
 .health-timeline-actions .btn-task-del:hover{color:var(--danger)}
 
+/* ==================== 用药记录板块 ==================== */
+.meds-section{padding:0}
+.meds-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;flex-wrap:wrap;gap:12px}
+.meds-header h2{font-size:24px;color:var(--accent)}
+.meds-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:20px}
+
+/* 药物卡片 */
+.med-card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;transition:var(--transition);display:flex;flex-direction:column;backdrop-filter:blur(8px)}
+.med-card:hover{border-color:var(--border-accent);box-shadow:0 4px 20px rgba(0,0,0,0.3)}
+.med-card-head{display:flex;gap:14px;padding:18px 20px 14px;align-items:flex-start;cursor:pointer;user-select:none;transition:var(--transition)}
+.med-card-head:hover{background:rgba(79,195,247,0.04)}
+.med-card-thumb{width:64px;height:64px;border-radius:14px;overflow:hidden;background:var(--bg-input);display:flex;align-items:center;justify-content:center;flex-shrink:0;border:1px solid var(--border)}
+.med-card-thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.med-card-thumb-placeholder{font-size:36px;line-height:1}
+.med-card-meta{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}
+.med-card-name{font-size:18px;font-weight:700;color:var(--text-primary);display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.med-card-name-text{word-break:break-word}
+.med-card-toggle{color:var(--text-muted);font-size:14px;transition:transform .25s ease;flex-shrink:0;align-self:center;padding:4px}
+.med-card.expanded .med-card-toggle{transform:rotate(180deg)}
+.med-card-notes{font-size:13px;color:var(--text-muted);line-height:1.5;word-break:break-word;padding:0 20px 14px;margin-top:-4px}
+.med-card-notes:empty,.med-card-notes.hidden{display:none}
+
+/* 药物操作按钮 */
+.med-card-actions{display:flex;gap:8px;padding:0 20px 16px;flex-wrap:wrap;border-top:1px solid var(--border);padding-top:14px;margin-top:auto}
+.med-action-btn{padding:8px 16px;background:var(--bg-input);border:1px solid var(--border);border-radius:18px;color:var(--text-secondary);cursor:pointer;font-size:13px;transition:var(--transition);min-height:38px;white-space:nowrap}
+.med-action-btn:hover{border-color:var(--accent);color:var(--accent);background:rgba(79,195,247,0.06)}
+.med-action-del:hover{border-color:var(--danger)!important;color:var(--danger)!important;background:rgba(239,83,80,0.06)!important}
+
+/* 用药记录区域（可折叠） */
+.med-logs-wrap{display:none;border-top:1px solid var(--border);padding:14px 20px 18px;background:rgba(13,18,40,0.4)}
+.med-card.expanded .med-logs-wrap{display:block}
+.med-logs-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px}
+.med-logs-title{font-size:13px;font-weight:600;color:var(--text-muted);letter-spacing:.5px}
+.med-logs-add{padding:6px 14px;background:rgba(76,175,80,0.12);border:1px solid rgba(76,175,80,0.3);border-radius:16px;color:var(--success);font-size:12px;font-weight:600;cursor:pointer;transition:var(--transition);min-height:32px;white-space:nowrap}
+.med-logs-add:hover{background:rgba(76,175,80,0.2);border-color:rgba(76,175,80,0.5)}
+.med-logs-empty{font-size:13px;color:var(--text-muted);text-align:center;padding:14px 0 6px;font-style:italic}
+
+/* 用药记录列表 */
+.med-logs-list{display:flex;flex-direction:column;gap:0;margin-top:6px}
+.med-log-item{display:flex;gap:10px;padding:10px 0;border-bottom:1px dashed var(--border);align-items:flex-start}
+.med-log-item:last-child{border-bottom:none}
+.med-log-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);margin-top:8px;flex-shrink:0}
+.med-log-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
+.med-log-top{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.med-log-time{font-size:13px;color:var(--text-secondary);font-weight:600}
+.med-log-dose{font-size:12px;padding:2px 8px;background:rgba(79,195,247,0.1);border:1px solid rgba(79,195,247,0.2);border-radius:10px;color:var(--accent)}
+.med-log-notes{font-size:13px;color:var(--text-muted);line-height:1.5;word-break:break-word;padding:2px 0}
+.med-log-notes:empty,.med-log-notes.hidden{display:none}
+.med-log-actions{display:flex;gap:4px;flex-shrink:0}
+.med-log-btn{padding:6px;background:transparent;border:none;color:var(--text-muted);cursor:pointer;font-size:14px;transition:var(--transition);min-width:32px;min-height:32px;border-radius:6px;display:inline-flex;align-items:center;justify-content:center}
+.med-log-btn:hover{background:rgba(79,195,247,0.08);color:var(--accent)}
+.med-log-btn.med-log-btn-del:hover{background:rgba(239,83,80,0.08);color:var(--danger)}
+
+/* 移动端 */
+@media (max-width:768px){
+  .meds-grid{grid-template-columns:1fr}
+  .meds-header h2{font-size:20px}
+  .med-card-head{padding:14px 16px 12px;gap:12px}
+  .med-card-thumb{width:56px;height:56px;border-radius:12px}
+  .med-card-thumb-placeholder{font-size:32px}
+  .med-card-notes{padding:0 16px 12px}
+  .med-card-actions{padding:12px 16px 14px}
+  .med-logs-wrap{padding:12px 16px 14px}
+}
+@media (max-width:480px){
+  .med-card-name{font-size:16px}
+  .med-log-top{flex-direction:column;gap:4px;align-items:flex-start}
+  .med-log-actions{align-self:flex-end}
+}
+
 /* Expenses */
 .expenses-section{display:flex;flex-direction:column;gap:20px}
 .expense-stats-bar{display:flex;gap:16px;align-items:center;flex-wrap:wrap}
